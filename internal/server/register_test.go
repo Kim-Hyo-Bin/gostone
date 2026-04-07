@@ -1,6 +1,7 @@
 package server
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -97,6 +98,46 @@ func TestRegister_v3UsersWithToken(t *testing.T) {
 	req2.Header.Set("X-Auth-Token", token)
 	r.ServeHTTP(w2, req2)
 	if w2.Code != http.StatusOK {
+		t.Fatalf("code %d %s", w2.Code, w2.Body.String())
+	}
+}
+
+func TestRegister_postUsers_create(t *testing.T) {
+	gdb, err := testutil.OpenMemory()
+	if err != nil {
+		t.Fatal(err)
+	}
+	fix, err := testutil.SeedAdmin(gdb, "adminpw")
+	if err != nil {
+		t.Fatal(err)
+	}
+	mgr, err := token.NewManager(gdb, token.ProviderJWT, "post-users-test", time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hub := &v3.Hub{DB: gdb, Tokens: mgr, Policy: policy.Default()}
+	r := gin.New()
+	Register(r, hub)
+
+	login := `{"auth":{"identity":{"methods":["password"],"password":{"user":{"name":"admin","password":"adminpw","domain":{"name":"Default"}}}}}}`
+	w1 := httptest.NewRecorder()
+	req1 := httptest.NewRequest(http.MethodPost, "/v3/auth/tokens", strings.NewReader(login))
+	req1.Host = "127.0.0.1:5000"
+	req1.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w1, req1)
+	if w1.Code != http.StatusCreated {
+		t.Fatal(w1.Body.String())
+	}
+	tok := w1.Header().Get("X-Subject-Token")
+
+	body := fmt.Sprintf(`{"user":{"name":"alice","domain_id":%q,"password":"user-secret"}}`, fix.DomainID)
+	w2 := httptest.NewRecorder()
+	req2 := httptest.NewRequest(http.MethodPost, "/v3/users", strings.NewReader(body))
+	req2.Host = "127.0.0.1:5000"
+	req2.Header.Set("Content-Type", "application/json")
+	req2.Header.Set("X-Auth-Token", tok)
+	r.ServeHTTP(w2, req2)
+	if w2.Code != http.StatusCreated {
 		t.Fatalf("code %d %s", w2.Code, w2.Body.String())
 	}
 }

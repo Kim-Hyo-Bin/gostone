@@ -17,8 +17,9 @@ type Policy struct {
 func Default() *Policy {
 	return &Policy{
 		Rules: map[string]string{
-			"identity:get_user":   "role:admin or user_match",
-			"identity:list_users": "role:admin",
+			"identity:get_user":    "role:admin or user_match",
+			"identity:list_users":  "role:admin",
+			"identity:create_user": "role:admin",
 
 			"identity:list_domains":          "role:admin",
 			"identity:get_domain":            "role:admin or domain_match",
