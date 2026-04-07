@@ -30,5 +30,5 @@ func BuildTokenResponse(db *gorm.DB, claims *token.Claims) (map[string]any, erro
 	if err != nil {
 		return nil, err
 	}
-	return buildTokenEnvelope(user, dom, claims.ProjectID, claims.Roles, exp, auditID, cat), nil
+	return buildTokenEnvelope(user, dom, claims.ProjectID, claims.Roles, exp, auditID, cat, []string{"password"}), nil
 }

@@ -3,7 +3,6 @@ package v3
 import (
 	"net/http"
 
-	"github.com/Kim-Hyo-Bin/gostone/internal/auth"
 	"github.com/Kim-Hyo-Bin/gostone/internal/common/httperr"
 	"github.com/Kim-Hyo-Bin/gostone/internal/models"
 	"github.com/gin-gonic/gin"
@@ -16,20 +15,14 @@ func registerV3RolesAPI(v3 *gin.RouterGroup, h *Hub) {
 	g.GET("", h.listRoles)
 	g.POST("", h.createRole)
 	g.GET("/:role_id", h.getRole)
-	g.HEAD("/:role_id", h.stubRoute("HEAD /v3/roles/:role_id"))
+	g.HEAD("/:role_id", h.headRole)
 	g.PATCH("/:role_id", h.patchRole)
-	g.PUT("/:role_id", h.stubRoute("PUT /v3/roles/:role_id"))
+	g.PUT("/:role_id", h.patchRole)
 	g.DELETE("/:role_id", h.deleteRole)
 }
 
 func (h *Hub) listRoles(c *gin.Context) {
-	actx, ok := auth.FromGin(c)
-	if !ok {
-		httperr.Unauthorized(c, "Unauthorized")
-		return
-	}
-	if !h.Policy.Allow("identity:list_roles", actx, nil) {
-		httperr.Forbidden(c, "You are not authorized to perform the requested action.")
+	if _, ok := h.requireAuthPolicy(c, "identity:list_roles", nil); !ok {
 		return
 	}
 	var list []models.Role
@@ -52,13 +45,7 @@ type roleJSON struct {
 }
 
 func (h *Hub) createRole(c *gin.Context) {
-	actx, ok := auth.FromGin(c)
-	if !ok {
-		httperr.Unauthorized(c, "Unauthorized")
-		return
-	}
-	if !h.Policy.Allow("identity:create_role", actx, nil) {
-		httperr.Forbidden(c, "You are not authorized to perform the requested action.")
+	if _, ok := h.requireAuthPolicy(c, "identity:create_role", nil); !ok {
 		return
 	}
 	var body roleJSON
@@ -75,14 +62,8 @@ func (h *Hub) createRole(c *gin.Context) {
 }
 
 func (h *Hub) getRole(c *gin.Context) {
-	actx, ok := auth.FromGin(c)
-	if !ok {
-		httperr.Unauthorized(c, "Unauthorized")
-		return
-	}
 	id := c.Param("role_id")
-	if !h.Policy.Allow("identity:get_role", actx, map[string]string{"role_id": id}) {
-		httperr.Forbidden(c, "You are not authorized to perform the requested action.")
+	if _, ok := h.requireAuthPolicy(c, "identity:get_role", map[string]string{"role_id": id}); !ok {
 		return
 	}
 	var r models.Role
@@ -97,15 +78,26 @@ func (h *Hub) getRole(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"role": roleRef(c, r)})
 }
 
-func (h *Hub) patchRole(c *gin.Context) {
-	actx, ok := auth.FromGin(c)
-	if !ok {
-		httperr.Unauthorized(c, "Unauthorized")
+func (h *Hub) headRole(c *gin.Context) {
+	id := c.Param("role_id")
+	if _, ok := h.requireAuthPolicy(c, "identity:get_role", map[string]string{"role_id": id}); !ok {
 		return
 	}
+	var r models.Role
+	if err := h.DB.Where("id = ?", id).First(&r).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			c.JSON(http.StatusNotFound, gin.H{"error": gin.H{"code": 404, "message": "Could not find role: " + id}})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"message": err.Error()}})
+		return
+	}
+	c.Status(http.StatusOK)
+}
+
+func (h *Hub) patchRole(c *gin.Context) {
 	id := c.Param("role_id")
-	if !h.Policy.Allow("identity:update_role", actx, map[string]string{"role_id": id}) {
-		httperr.Forbidden(c, "You are not authorized to perform the requested action.")
+	if _, ok := h.requireAuthPolicy(c, "identity:update_role", map[string]string{"role_id": id}); !ok {
 		return
 	}
 	var body roleJSON
@@ -136,23 +128,29 @@ func (h *Hub) patchRole(c *gin.Context) {
 }
 
 func (h *Hub) deleteRole(c *gin.Context) {
-	actx, ok := auth.FromGin(c)
-	if !ok {
-		httperr.Unauthorized(c, "Unauthorized")
-		return
-	}
 	id := c.Param("role_id")
-	if !h.Policy.Allow("identity:delete_role", actx, map[string]string{"role_id": id}) {
-		httperr.Forbidden(c, "You are not authorized to perform the requested action.")
+	if _, ok := h.requireAuthPolicy(c, "identity:delete_role", map[string]string{"role_id": id}); !ok {
 		return
 	}
-	res := h.DB.Delete(&models.Role{}, "id = ?", id)
-	if res.Error != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"message": res.Error.Error()}})
-		return
-	}
-	if res.RowsAffected == 0 {
-		c.JSON(http.StatusNotFound, gin.H{"error": gin.H{"code": 404, "message": "Could not find role: " + id}})
+	err := h.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("role_id = ?", id).Delete(&models.UserProjectRole{}).Error; err != nil {
+			return err
+		}
+		res := tx.Where("id = ?", id).Delete(&models.Role{})
+		if res.Error != nil {
+			return res.Error
+		}
+		if res.RowsAffected == 0 {
+			return gorm.ErrRecordNotFound
+		}
+		return nil
+	})
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			c.JSON(http.StatusNotFound, gin.H{"error": gin.H{"code": 404, "message": "Could not find role: " + id}})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"message": err.Error()}})
 		return
 	}
 	c.Status(http.StatusNoContent)

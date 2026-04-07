@@ -15,31 +15,84 @@ type Policy struct {
 
 // Default builds the starter policy used by gostone (extend via config file later).
 func Default() *Policy {
-	return &Policy{
-		Rules: map[string]string{
-			"identity:get_user":    "role:admin or user_match",
-			"identity:list_users":  "role:admin",
-			"identity:create_user": "role:admin",
+	rules := map[string]string{
+		"identity:get_user":    "role:admin or user_match",
+		"identity:list_users":  "role:admin",
+		"identity:create_user": "role:admin",
+		"identity:update_user": "role:admin or user_match",
+		"identity:delete_user": "role:admin",
 
-			"identity:list_domains":          "role:admin",
-			"identity:get_domain":            "role:admin or domain_match",
-			"identity:create_domain":         "role:admin",
-			"identity:update_domain":         "role:admin",
-			"identity:delete_domain":         "role:admin",
-			"identity:list_projects":         "role:admin",
-			"identity:get_project":           "role:admin or project_match",
-			"identity:create_project":        "role:admin",
-			"identity:update_project":        "role:admin",
-			"identity:delete_project":        "role:admin",
-			"identity:list_roles":            "role:admin",
-			"identity:get_role":              "role:admin or authenticated",
-			"identity:create_role":           "role:admin",
-			"identity:update_role":           "role:admin",
-			"identity:delete_role":           "role:admin",
-			"identity:list_role_assignments": "role:admin",
-		},
-		DefaultRule: "authenticated",
+		"identity:change_user_password":      "role:admin or user_match",
+		"identity:list_groups_for_user":      "role:admin or user_match",
+		"identity:list_projects_for_user":    "role:admin or user_match",
+		"identity:list_credentials_for_user": "role:admin or user_match",
+		"identity:create_ec2_credential":     "role:admin or user_match",
+		"identity:get_ec2_credential":        "role:admin or user_match",
+		"identity:delete_ec2_credential":     "role:admin or user_match",
+
+		"identity:list_auth_projects": "authenticated",
+		"identity:list_auth_domains":  "authenticated",
+		"identity:get_simple_ca":      "authenticated",
+
+		"identity:list_application_credentials":  "role:admin or user_match",
+		"identity:create_application_credential": "role:admin or user_match",
+		"identity:get_application_credential":    "role:admin or user_match",
+		"identity:delete_application_credential": "role:admin or user_match",
+		"identity:list_access_rules":             "role:admin or user_match",
+		"identity:create_access_rule":            "role:admin or user_match",
+		"identity:get_access_rule":               "role:admin or user_match",
+		"identity:delete_access_rule":            "role:admin or user_match",
+		"identity:list_oauth1_access_tokens":     "role:admin or user_match",
+		"identity:create_oauth1_access_token":    "role:admin or user_match",
+		"identity:get_oauth1_access_token":       "role:admin or user_match",
+		"identity:delete_oauth1_access_token":    "role:admin or user_match",
+
+		"identity:list_domains":           "role:admin",
+		"identity:get_domain":             "role:admin or domain_match",
+		"identity:create_domain":          "role:admin",
+		"identity:update_domain":          "role:admin",
+		"identity:delete_domain":          "role:admin",
+		"identity:list_projects":          "role:admin",
+		"identity:get_project":            "role:admin or project_match",
+		"identity:create_project":         "role:admin",
+		"identity:update_project":         "role:admin",
+		"identity:delete_project":         "role:admin",
+		"identity:list_roles":             "role:admin",
+		"identity:get_role":               "role:admin or authenticated",
+		"identity:create_role":            "role:admin",
+		"identity:update_role":            "role:admin",
+		"identity:delete_role":            "role:admin",
+		"identity:list_role_assignments":  "role:admin",
+		"identity:create_role_assignment": "role:admin",
+
+		"identity:list_regions":  "role:admin",
+		"identity:get_region":    "role:admin",
+		"identity:create_region": "role:admin",
+		"identity:update_region": "role:admin",
+		"identity:delete_region": "role:admin",
+
+		"identity:list_services":  "role:admin",
+		"identity:get_service":    "role:admin",
+		"identity:create_service": "role:admin",
+		"identity:update_service": "role:admin",
+		"identity:delete_service": "role:admin",
+
+		"identity:list_endpoints":  "role:admin",
+		"identity:get_endpoint":    "role:admin",
+		"identity:create_endpoint": "role:admin",
+		"identity:update_endpoint": "role:admin",
+		"identity:delete_endpoint": "role:admin",
+
+		"identity:list_project_user_roles":  "role:admin",
+		"identity:assign_project_user_role": "role:admin",
+		"identity:remove_project_user_role": "role:admin",
 	}
+	for _, k := range extraAdminOnlyRules() {
+		if _, ok := rules[k]; !ok {
+			rules[k] = "role:admin"
+		}
+	}
+	return &Policy{Rules: rules, DefaultRule: "authenticated"}
 }
 
 // Allow evaluates the rule for action using token context and optional targets (e.g. user_id).

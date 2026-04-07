@@ -3,7 +3,6 @@ package v3
 import (
 	"net/http"
 
-	"github.com/Kim-Hyo-Bin/gostone/internal/auth"
 	"github.com/Kim-Hyo-Bin/gostone/internal/common/httperr"
 	"github.com/Kim-Hyo-Bin/gostone/internal/models"
 	"github.com/gin-gonic/gin"
@@ -13,21 +12,25 @@ import (
 
 func registerV3DomainsAPI(v3 *gin.RouterGroup, h *Hub) {
 	g := v3.Group("/domains")
+	g.GET("/:domain_id/users/:user_id/roles", h.listDomainUserRoles)
+	g.PUT("/:domain_id/users/:user_id/roles/:role_id", h.putDomainUserRole)
+	g.DELETE("/:domain_id/users/:user_id/roles/:role_id", h.deleteDomainUserRole)
+	g.GET("/:domain_id/groups/:group_id/roles", h.listDomainGroupRoles)
+	g.PUT("/:domain_id/groups/:group_id/roles/:role_id", h.putDomainGroupRole)
+	g.DELETE("/:domain_id/groups/:group_id/roles/:role_id", h.deleteDomainGroupRole)
+
+	registerV3DomainConfigRoutes(g, h)
+
 	g.GET("", h.listDomains)
 	g.POST("", h.createDomain)
 	g.GET("/:domain_id", h.getDomain)
+	g.HEAD("/:domain_id", h.headDomain)
 	g.PATCH("/:domain_id", h.patchDomain)
 	g.DELETE("/:domain_id", h.deleteDomain)
 }
 
 func (h *Hub) listDomains(c *gin.Context) {
-	actx, ok := auth.FromGin(c)
-	if !ok {
-		httperr.Unauthorized(c, "Unauthorized")
-		return
-	}
-	if !h.Policy.Allow("identity:list_domains", actx, nil) {
-		httperr.Forbidden(c, "You are not authorized to perform the requested action.")
+	if _, ok := h.requireAuthPolicy(c, "identity:list_domains", nil); !ok {
 		return
 	}
 	var list []models.Domain
@@ -50,13 +53,7 @@ type domainJSON struct {
 }
 
 func (h *Hub) createDomain(c *gin.Context) {
-	actx, ok := auth.FromGin(c)
-	if !ok {
-		httperr.Unauthorized(c, "Unauthorized")
-		return
-	}
-	if !h.Policy.Allow("identity:create_domain", actx, nil) {
-		httperr.Forbidden(c, "You are not authorized to perform the requested action.")
+	if _, ok := h.requireAuthPolicy(c, "identity:create_domain", nil); !ok {
 		return
 	}
 	var body domainJSON
@@ -77,14 +74,8 @@ func (h *Hub) createDomain(c *gin.Context) {
 }
 
 func (h *Hub) getDomain(c *gin.Context) {
-	actx, ok := auth.FromGin(c)
-	if !ok {
-		httperr.Unauthorized(c, "Unauthorized")
-		return
-	}
 	id := c.Param("domain_id")
-	if !h.Policy.Allow("identity:get_domain", actx, map[string]string{"domain_id": id}) {
-		httperr.Forbidden(c, "You are not authorized to perform the requested action.")
+	if _, ok := h.requireAuthPolicy(c, "identity:get_domain", map[string]string{"domain_id": id}); !ok {
 		return
 	}
 	var d models.Domain
@@ -99,15 +90,26 @@ func (h *Hub) getDomain(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"domain": domainRef(c, d)})
 }
 
-func (h *Hub) patchDomain(c *gin.Context) {
-	actx, ok := auth.FromGin(c)
-	if !ok {
-		httperr.Unauthorized(c, "Unauthorized")
+func (h *Hub) headDomain(c *gin.Context) {
+	id := c.Param("domain_id")
+	if _, ok := h.requireAuthPolicy(c, "identity:get_domain", map[string]string{"domain_id": id}); !ok {
 		return
 	}
+	var d models.Domain
+	if err := h.DB.Where("id = ?", id).First(&d).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			c.JSON(http.StatusNotFound, gin.H{"error": gin.H{"code": 404, "message": "Could not find domain: " + id}})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"message": err.Error()}})
+		return
+	}
+	c.Status(http.StatusOK)
+}
+
+func (h *Hub) patchDomain(c *gin.Context) {
 	id := c.Param("domain_id")
-	if !h.Policy.Allow("identity:update_domain", actx, map[string]string{"domain_id": id}) {
-		httperr.Forbidden(c, "You are not authorized to perform the requested action.")
+	if _, ok := h.requireAuthPolicy(c, "identity:update_domain", map[string]string{"domain_id": id}); !ok {
 		return
 	}
 	var body domainJSON
@@ -138,17 +140,11 @@ func (h *Hub) patchDomain(c *gin.Context) {
 }
 
 func (h *Hub) deleteDomain(c *gin.Context) {
-	actx, ok := auth.FromGin(c)
-	if !ok {
-		httperr.Unauthorized(c, "Unauthorized")
-		return
-	}
 	id := c.Param("domain_id")
-	if !h.Policy.Allow("identity:delete_domain", actx, map[string]string{"domain_id": id}) {
-		httperr.Forbidden(c, "You are not authorized to perform the requested action.")
+	if _, ok := h.requireAuthPolicy(c, "identity:delete_domain", map[string]string{"domain_id": id}); !ok {
 		return
 	}
-	res := h.DB.Delete(&models.Domain{}, "id = ?", id)
+	res := h.DB.Where("id = ?", id).Delete(&models.Domain{})
 	if res.Error != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"message": res.Error.Error()}})
 		return

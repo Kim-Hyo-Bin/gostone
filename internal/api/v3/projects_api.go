@@ -3,7 +3,6 @@ package v3
 import (
 	"net/http"
 
-	"github.com/Kim-Hyo-Bin/gostone/internal/auth"
 	"github.com/Kim-Hyo-Bin/gostone/internal/common/httperr"
 	"github.com/Kim-Hyo-Bin/gostone/internal/models"
 	"github.com/gin-gonic/gin"
@@ -11,23 +10,42 @@ import (
 	"gorm.io/gorm"
 )
 
+// headProject mirrors get_project policy and existence checks with an empty body.
+func (h *Hub) headProject(c *gin.Context) {
+	id := c.Param("project_id")
+	if _, ok := h.requireAuthPolicy(c, "identity:get_project", map[string]string{"project_id": id}); !ok {
+		return
+	}
+	var p models.Project
+	if err := h.DB.Where("id = ?", id).First(&p).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			c.JSON(http.StatusNotFound, gin.H{"error": gin.H{"code": 404, "message": "Could not find project: " + id}})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"message": err.Error()}})
+		return
+	}
+	c.Status(http.StatusOK)
+}
+
 func registerV3ProjectsAPI(v3 *gin.RouterGroup, h *Hub) {
 	g := v3.Group("/projects")
+	g.GET("/:project_id/users/:user_id/roles", h.listProjectUserRoles)
+	g.PUT("/:project_id/users/:user_id/roles/:role_id", h.putProjectUserRole)
+	g.DELETE("/:project_id/users/:user_id/roles/:role_id", h.deleteProjectUserRole)
+	g.GET("/:project_id/groups/:group_id/roles", h.listGroupProjectRoles)
+	g.PUT("/:project_id/groups/:group_id/roles/:role_id", h.putGroupProjectRole)
+	g.DELETE("/:project_id/groups/:group_id/roles/:role_id", h.deleteGroupProjectRole)
 	g.GET("", h.listProjects)
 	g.POST("", h.createProject)
 	g.GET("/:project_id", h.getProject)
+	g.HEAD("/:project_id", h.headProject)
 	g.PATCH("/:project_id", h.patchProject)
 	g.DELETE("/:project_id", h.deleteProject)
 }
 
 func (h *Hub) listProjects(c *gin.Context) {
-	actx, ok := auth.FromGin(c)
-	if !ok {
-		httperr.Unauthorized(c, "Unauthorized")
-		return
-	}
-	if !h.Policy.Allow("identity:list_projects", actx, nil) {
-		httperr.Forbidden(c, "You are not authorized to perform the requested action.")
+	if _, ok := h.requireAuthPolicy(c, "identity:list_projects", nil); !ok {
 		return
 	}
 	var list []models.Project
@@ -51,13 +69,7 @@ type projectJSON struct {
 }
 
 func (h *Hub) createProject(c *gin.Context) {
-	actx, ok := auth.FromGin(c)
-	if !ok {
-		httperr.Unauthorized(c, "Unauthorized")
-		return
-	}
-	if !h.Policy.Allow("identity:create_project", actx, nil) {
-		httperr.Forbidden(c, "You are not authorized to perform the requested action.")
+	if _, ok := h.requireAuthPolicy(c, "identity:create_project", nil); !ok {
 		return
 	}
 	var body projectJSON
@@ -78,14 +90,8 @@ func (h *Hub) createProject(c *gin.Context) {
 }
 
 func (h *Hub) getProject(c *gin.Context) {
-	actx, ok := auth.FromGin(c)
-	if !ok {
-		httperr.Unauthorized(c, "Unauthorized")
-		return
-	}
 	id := c.Param("project_id")
-	if !h.Policy.Allow("identity:get_project", actx, map[string]string{"project_id": id}) {
-		httperr.Forbidden(c, "You are not authorized to perform the requested action.")
+	if _, ok := h.requireAuthPolicy(c, "identity:get_project", map[string]string{"project_id": id}); !ok {
 		return
 	}
 	var p models.Project
@@ -101,14 +107,8 @@ func (h *Hub) getProject(c *gin.Context) {
 }
 
 func (h *Hub) patchProject(c *gin.Context) {
-	actx, ok := auth.FromGin(c)
-	if !ok {
-		httperr.Unauthorized(c, "Unauthorized")
-		return
-	}
 	id := c.Param("project_id")
-	if !h.Policy.Allow("identity:update_project", actx, map[string]string{"project_id": id}) {
-		httperr.Forbidden(c, "You are not authorized to perform the requested action.")
+	if _, ok := h.requireAuthPolicy(c, "identity:update_project", map[string]string{"project_id": id}); !ok {
 		return
 	}
 	var body projectJSON
@@ -142,23 +142,44 @@ func (h *Hub) patchProject(c *gin.Context) {
 }
 
 func (h *Hub) deleteProject(c *gin.Context) {
-	actx, ok := auth.FromGin(c)
-	if !ok {
-		httperr.Unauthorized(c, "Unauthorized")
-		return
-	}
 	id := c.Param("project_id")
-	if !h.Policy.Allow("identity:delete_project", actx, map[string]string{"project_id": id}) {
-		httperr.Forbidden(c, "You are not authorized to perform the requested action.")
+	if _, ok := h.requireAuthPolicy(c, "identity:delete_project", map[string]string{"project_id": id}); !ok {
 		return
 	}
-	res := h.DB.Delete(&models.Project{}, "id = ?", id)
-	if res.Error != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"message": res.Error.Error()}})
-		return
-	}
-	if res.RowsAffected == 0 {
-		c.JSON(http.StatusNotFound, gin.H{"error": gin.H{"code": 404, "message": "Could not find project: " + id}})
+	err := h.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("project_id = ?", id).Delete(&models.UserProjectRole{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("project_id = ?", id).Delete(&models.GroupProjectRole{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("project_id = ?", id).Delete(&models.ProjectTag{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("project_id = ?", id).Delete(&models.ProjectEndpointFilter{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("project_id = ?", id).Delete(&models.Limit{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("project_id = ?", id).Delete(&models.EndpointGroupProject{}).Error; err != nil {
+			return err
+		}
+		res := tx.Where("id = ?", id).Delete(&models.Project{})
+		if res.Error != nil {
+			return res.Error
+		}
+		if res.RowsAffected == 0 {
+			return gorm.ErrRecordNotFound
+		}
+		return nil
+	})
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			c.JSON(http.StatusNotFound, gin.H{"error": gin.H{"code": 404, "message": "Could not find project: " + id}})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"message": err.Error()}})
 		return
 	}
 	c.Status(http.StatusNoContent)
