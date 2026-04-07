@@ -1,7 +1,7 @@
 package auth
 
 import (
-	"github.com/Kim-Hyo-Bin/gostone/internal/apierrors"
+	"github.com/Kim-Hyo-Bin/gostone/internal/common/httperr"
 	"github.com/Kim-Hyo-Bin/gostone/internal/token"
 	"github.com/gin-gonic/gin"
 )
@@ -18,14 +18,14 @@ func Middleware(issuer *token.JWT) gin.HandlerFunc {
 
 		raw := c.GetHeader("X-Auth-Token")
 		if raw == "" {
-			apierrors.Unauthorized(c, "The request you have made requires authentication.")
+			httperr.Unauthorized(c, "The request you have made requires authentication.")
 			c.Abort()
 			return
 		}
 
 		claims, err := issuer.Parse(raw)
 		if err != nil {
-			apierrors.Unauthorized(c, "Invalid token.")
+			httperr.Unauthorized(c, "Invalid token.")
 			c.Abort()
 			return
 		}

@@ -7,18 +7,18 @@ import (
 	"os"
 	"time"
 
+	"github.com/Kim-Hyo-Bin/gostone/internal/api/v3"
 	"github.com/Kim-Hyo-Bin/gostone/internal/bootstrap"
-	"github.com/Kim-Hyo-Bin/gostone/internal/config"
+	"github.com/Kim-Hyo-Bin/gostone/internal/conf"
 	"github.com/Kim-Hyo-Bin/gostone/internal/db"
-	"github.com/Kim-Hyo-Bin/gostone/internal/handlers"
-	"github.com/Kim-Hyo-Bin/gostone/internal/httpserver"
 	"github.com/Kim-Hyo-Bin/gostone/internal/policy"
+	"github.com/Kim-Hyo-Bin/gostone/internal/server"
 	"github.com/Kim-Hyo-Bin/gostone/internal/token"
 	"github.com/gin-gonic/gin"
 )
 
 // Run starts the gostone HTTP server using the merged configuration (file + env overrides).
-func Run(cfg *config.Config) error {
+func Run(cfg *conf.Config) error {
 	if cfg.Token.Secret == "" {
 		return fmt.Errorf("token signing secret is empty: set [token] secret in gostone.conf or GOSTONE_TOKEN_SECRET")
 	}
@@ -51,7 +51,7 @@ func Run(cfg *config.Config) error {
 		}
 	}
 
-	hub := &handlers.Hub{
+	hub := &v3.Hub{
 		DB:     gdb,
 		Tokens: jwtIssuer,
 		Policy: policy.Default(),
@@ -59,7 +59,7 @@ func Run(cfg *config.Config) error {
 
 	r := gin.New()
 	r.Use(gin.Recovery(), gin.Logger())
-	httpserver.Register(r, hub)
+	server.Register(r, hub)
 
 	addr := cfg.Service.Listen
 	log.Printf("gostone listening on %s", addr)

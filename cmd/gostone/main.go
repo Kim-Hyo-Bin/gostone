@@ -4,12 +4,12 @@ import (
 	"log"
 
 	"github.com/Kim-Hyo-Bin/gostone/internal/app"
-	"github.com/Kim-Hyo-Bin/gostone/internal/config"
+	"github.com/Kim-Hyo-Bin/gostone/internal/conf"
 )
 
 func main() {
-	opts := config.ParseFlags()
-	cfg, err := config.Load(opts)
+	opts := conf.ParseFlags()
+	cfg, err := conf.Load(opts)
 	if err != nil {
 		log.Fatal(err)
 	}
