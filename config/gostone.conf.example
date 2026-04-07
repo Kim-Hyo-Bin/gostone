@@ -1,0 +1,17 @@
+# Example gostone configuration (INI, Keystone/oslo.config style).
+# Copy to /etc/gostone/gostone.conf or pass: gostone --config-file /path/to/gostone.conf
+#
+# Drop-in fragments: place additional *.conf files in /etc/gostone/gostone.conf.d/
+# or set --config-dir /path/to/dir (or GOSTONE_CONFIG_DIR).
+
+[DEFAULT]
+# If true, Gin runs in debug mode when GIN_MODE is unset.
+debug = false
+
+[database]
+# Datastore DSN (SQLite via glebarez for now; same spirit as Keystone [database] connection).
+connection = file::memory:?cache=shared
+
+[service]
+# HTTP listen address (host:port or :port).
+listen = :8080

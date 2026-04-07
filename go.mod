@@ -5,6 +5,7 @@ go 1.25.0
 require (
 	github.com/gin-gonic/gin v1.12.0
 	github.com/glebarez/sqlite v1.11.0
+	gopkg.in/ini.v1 v1.67.0
 	gorm.io/gorm v1.31.1
 )
 
