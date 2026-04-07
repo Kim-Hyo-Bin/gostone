@@ -10,7 +10,7 @@ type Config struct {
 	} `ini:"DEFAULT"`
 
 	Database struct {
-		// Connection is the datastore DSN (Keystone [database] connection; SQLite form for now).
+		// Connection is the datastore URL/DSN (Keystone [database] connection: SQLAlchemy or native MySQL/Postgres/SQLite).
 		Connection string `ini:"connection"`
 	} `ini:"database"`
 

@@ -4,7 +4,10 @@ import "os"
 
 // applyEnvOverrides applies legacy env vars when set (handy for dev / containers).
 func applyEnvOverrides(c *Config) {
-	if v := os.Getenv("GOSTONE_SQLITE_DSN"); v != "" {
+	if v := os.Getenv("GOSTONE_DATABASE_CONNECTION"); v != "" {
+		c.Database.Connection = v
+	} else if v := os.Getenv("GOSTONE_SQLITE_DSN"); v != "" {
+		// Deprecated: use GOSTONE_DATABASE_CONNECTION (same as Keystone [database] connection).
 		c.Database.Connection = v
 	}
 	if v := os.Getenv("GOSTONE_HTTP_ADDR"); v != "" {

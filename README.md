@@ -14,7 +14,7 @@ The goal is to port Keystone’s **API surface** so that it can run **standalone
 
 - **Go style**: [Effective Go](https://go.dev/doc/effective_go) as the baseline; layout is also shaped like Keystone’s service boundaries (HTTP wiring vs. API handlers vs. auth).
 - **HTTP**: [Gin](https://github.com/gin-gonic/gin) on top of `net/http`.
-- **Data layer**: [GORM](https://gorm.io/) with [glebarez/sqlite](https://github.com/glebarez/sqlite) for local/dev (pure Go, no CGO).
+- **Data layer**: [GORM](https://gorm.io/) against **SQLite** ([glebarez/sqlite](https://github.com/glebarez/sqlite), no CGO), **MySQL/MariaDB**, or **PostgreSQL**, using the same **`[database] connection`** idea as Keystone (SQLAlchemy-style URLs or native DSNs).
 
 ## Layout
 
@@ -46,7 +46,8 @@ INI files follow a Keystone/oslo-style split: main file plus optional `*.conf` d
 - **Flags**: `--config-file` / `-c`, `--config-dir`
 - **Paths**: `GOSTONE_CONFIG`, or `/etc/gostone/gostone.conf`, or `./gostone.conf`, plus `gostone.conf.d` when using default layout (see `internal/conf/paths.go`).
 - **Environment overrides** (when set, applied after file config):
-  - `GOSTONE_SQLITE_DSN` — database `connection`
+  - `GOSTONE_DATABASE_CONNECTION` — overrides `[database] connection` (Keystone-style URL or DSN)
+  - `GOSTONE_SQLITE_DSN` — deprecated alias for the same field (SQLite-only name)
   - `GOSTONE_HTTP_ADDR` — `listen` address
   - `GOSTONE_TOKEN_SECRET` — JWT HMAC secret (**required** in practice; must match `[token] secret` if both are used)
 

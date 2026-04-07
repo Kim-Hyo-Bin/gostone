@@ -9,7 +9,18 @@
 debug = false
 
 [database]
-# Datastore DSN (SQLite via glebarez for now; same spirit as Keystone [database] connection).
+# Same role as Keystone [database] connection: SQLAlchemy URL or native driver DSN.
+#
+# SQLite (in-process, dev / tests; glebarez, no CGO):
+#   connection = file::memory:?cache=shared
+#   connection = file:/var/lib/gostone/gostone.db
+# SQLAlchemy-style (recommended when mirroring Keystone):
+#   connection = mysql+pymysql://keystone:PASSWORD@127.0.0.1:3306/keystone
+#   connection = postgresql+psycopg2://keystone:PASSWORD@127.0.0.1:5432/keystone
+# Native Go DSNs:
+#   connection = user:pass@tcp(127.0.0.1:3306)/keystone?parseTime=true&charset=utf8mb4
+#   connection = postgres://user:pass@127.0.0.1:5432/keystone?sslmode=disable
+#   connection = host=127.0.0.1 user=keystone password=SECRET dbname=keystone sslmode=disable
 connection = file::memory:?cache=shared
 
 [service]
