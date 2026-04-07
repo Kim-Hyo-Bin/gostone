@@ -1,0 +1,39 @@
+# Build outputs
+/build/bin/
+
+# Compiled binaries (when built outside build/)
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+/gostone
+
+# Test binary and coverage
+*.test
+*.out
+coverage.out
+coverage.html
+*.prof
+cpu.prof
+mem.prof
+
+# Dependency directories
+vendor/
+
+# Go workspace file
+go.work
+go.work.sum
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Editor and OS
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
