@@ -6,6 +6,7 @@ import "github.com/gin-gonic/gin"
 // Registration order matters for Gin (wildcard name consistency and path specificity).
 func registerV3(v3 *gin.RouterGroup, h *Hub) {
 	registerV3RolesAndAssignments(v3, h)
+	registerV3Users(v3, h)
 	registerV3StandardCRUD(v3, h)
 	registerV3Auth(v3, h)
 	registerV3ProjectsAndUsers(v3, h)

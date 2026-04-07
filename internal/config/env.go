@@ -10,4 +10,7 @@ func applyEnvOverrides(c *Config) {
 	if v := os.Getenv("GOSTONE_HTTP_ADDR"); v != "" {
 		c.Service.Listen = v
 	}
+	if v := os.Getenv("GOSTONE_TOKEN_SECRET"); v != "" {
+		c.Token.Secret = v
+	}
 }

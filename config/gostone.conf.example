@@ -15,3 +15,9 @@ connection = file::memory:?cache=shared
 [service]
 # HTTP listen address (host:port or :port).
 listen = :8080
+
+[token]
+# Required: HMAC secret for JWT access tokens (use a long random value in production).
+secret = change-me-in-production
+# Token lifetime in hours.
+expiration_hours = 24

@@ -18,4 +18,11 @@ type Config struct {
 		// Listen is the HTTP bind address (host:port or :port), e.g. ":5000".
 		Listen string `ini:"listen"`
 	} `ini:"service"`
+
+	Token struct {
+		// Secret is the HMAC key for JWTs (set [token] secret or GOSTONE_TOKEN_SECRET).
+		Secret string `ini:"secret"`
+		// ExpirationHours is token lifetime in hours.
+		ExpirationHours int `ini:"expiration_hours"`
+	} `ini:"token"`
 }

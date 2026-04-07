@@ -7,7 +7,6 @@ func registerV3StandardCRUD(v3 *gin.RouterGroup, h *Hub) {
 		collection string
 		memberID   string
 	}{
-		{"users", "user_id"},
 		{"projects", "project_id"},
 		{"groups", "group_id"},
 		{"domains", "domain_id"},
