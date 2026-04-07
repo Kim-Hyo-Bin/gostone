@@ -30,6 +30,9 @@ go.work.sum
 .env.*
 !.env.example
 
+# Local scratch (e.g. upstream tarball extract)
+.tmp/
+
 # Editor and OS
 .idea/
 .vscode/
