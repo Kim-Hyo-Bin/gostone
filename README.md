@@ -96,3 +96,12 @@ Many v3 routes return **501 Not Implemented**; working pieces include version di
 go test ./...
 go vet ./...
 ```
+
+Merged coverage across module packages (single profile; target **≥ 60%** for CI):
+
+```bash
+go test ./... -coverprofile=coverage.out -coverpkg=./...
+go tool cover -func=coverage.out
+```
+
+Or run `./scripts/coverage.sh` for the same check and a total line at the end.
