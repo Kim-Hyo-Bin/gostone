@@ -13,4 +13,5 @@ The goal is to port Keystone’s **API surface** so that it can run **standalone
 ## Conventions
 
 - **Go style**: Code follows [Effective Go](https://go.dev/doc/effective_go) as the baseline for idiomatic Go and project-wide conventions.
-- **Data layer**: Persistence uses an **ORM** so multiple database backends can be supported behind one abstraction, instead of tying the service to a single engine or ad-hoc SQL per driver.
+- **HTTP**: APIs are served with **[Gin](https://github.com/gin-gonic/gin)** on top of `net/http`.
+- **Data layer**: Persistence uses **[GORM](https://gorm.io/)** so multiple backends can sit behind one abstraction. Local/dev builds use **[glebarez/sqlite](https://github.com/glebarez/sqlite)** (pure Go, no CGO); other drivers can be wired in as needed.
