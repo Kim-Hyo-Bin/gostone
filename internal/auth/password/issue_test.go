@@ -14,29 +14,32 @@ func TestIssuePasswordToken_errors(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	j := &token.JWT{Secret: []byte("k"), Issuer: "i", TTL: time.Hour}
+	mgr, err := token.NewManager(gdb, token.ProviderJWT, "k", time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	_, _, _, err = IssuePasswordToken(gdb, j, nil)
+	_, _, _, err = IssuePasswordToken(gdb, mgr, nil)
 	if err == nil {
 		t.Fatal("nil request")
 	}
 
 	var req PasswordAuthRequest
 	req.Auth.Identity.Methods = []string{"token"}
-	_, _, _, err = IssuePasswordToken(gdb, j, &req)
+	_, _, _, err = IssuePasswordToken(gdb, mgr, &req)
 	if err == nil || !strings.Contains(err.Error(), "unsupported") {
 		t.Fatalf("got %v", err)
 	}
 
 	req.Auth.Identity.Methods = []string{"password"}
-	_, _, _, err = IssuePasswordToken(gdb, j, &req)
+	_, _, _, err = IssuePasswordToken(gdb, mgr, &req)
 	if err == nil || !strings.Contains(err.Error(), "password required") {
 		t.Fatalf("got %v", err)
 	}
 
 	req.Auth.Identity.Password.User.Name = "admin"
 	req.Auth.Identity.Password.User.Password = "secret"
-	_, _, _, err = IssuePasswordToken(gdb, j, &req)
+	_, _, _, err = IssuePasswordToken(gdb, mgr, &req)
 	if err == nil || !strings.Contains(err.Error(), "domain") {
 		t.Fatalf("got %v", err)
 	}
@@ -51,7 +54,10 @@ func TestIssuePasswordToken_success(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	j := &token.JWT{Secret: []byte("k"), Issuer: "i", TTL: time.Hour}
+	mgr, err := token.NewManager(gdb, token.ProviderJWT, "k", time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	req := PasswordAuthRequest{}
 	req.Auth.Identity.Methods = []string{"password"}
@@ -59,7 +65,7 @@ func TestIssuePasswordToken_success(t *testing.T) {
 	req.Auth.Identity.Password.User.Password = "secret"
 	req.Auth.Identity.Password.User.Domain.Name = "Default"
 
-	tok, _, body, err := IssuePasswordToken(gdb, j, &req)
+	tok, _, body, err := IssuePasswordToken(gdb, mgr, &req)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -71,7 +77,7 @@ func TestIssuePasswordToken_success(t *testing.T) {
 	}
 	// wrong password
 	req.Auth.Identity.Password.User.Password = "nope"
-	_, _, _, err = IssuePasswordToken(gdb, j, &req)
+	_, _, _, err = IssuePasswordToken(gdb, mgr, &req)
 	if err == nil || !strings.Contains(err.Error(), "invalid password") {
 		t.Fatalf("got %v", err)
 	}
@@ -79,7 +85,7 @@ func TestIssuePasswordToken_success(t *testing.T) {
 	// missing user in DB
 	req.Auth.Identity.Password.User.Password = "secret"
 	req.Auth.Identity.Password.User.Name = "nobody"
-	_, _, _, err = IssuePasswordToken(gdb, j, &req)
+	_, _, _, err = IssuePasswordToken(gdb, mgr, &req)
 	if err == nil || !strings.Contains(err.Error(), "user") {
 		t.Fatalf("got %v", err)
 	}
@@ -87,7 +93,7 @@ func TestIssuePasswordToken_success(t *testing.T) {
 	// unknown domain name
 	req.Auth.Identity.Password.User.Name = "admin"
 	req.Auth.Identity.Password.User.Domain.Name = "Nope"
-	_, _, _, err = IssuePasswordToken(gdb, j, &req)
+	_, _, _, err = IssuePasswordToken(gdb, mgr, &req)
 	if err == nil || !strings.Contains(err.Error(), "domain") {
 		t.Fatalf("got %v", err)
 	}

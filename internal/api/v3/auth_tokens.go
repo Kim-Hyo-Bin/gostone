@@ -52,7 +52,10 @@ func (h *Hub) headAuthTokens(c *gin.Context) {
 }
 
 func (h *Hub) deleteAuthTokens(c *gin.Context) {
-	// JWT has no server-side revocation yet (Fernet/UUID + revoke list would).
+	raw := c.GetHeader("X-Auth-Token")
+	if raw != "" {
+		_ = h.Tokens.Revoke(raw)
+	}
 	c.Status(http.StatusNoContent)
 }
 

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/Kim-Hyo-Bin/gostone/internal/catalog"
 	"github.com/Kim-Hyo-Bin/gostone/internal/models"
 	"github.com/Kim-Hyo-Bin/gostone/internal/token"
 	"github.com/google/uuid"
@@ -12,8 +13,8 @@ import (
 	"gorm.io/gorm"
 )
 
-// IssuePasswordToken validates password auth and returns a JWT plus Keystone-like token body fields.
-func IssuePasswordToken(db *gorm.DB, j *token.JWT, req *PasswordAuthRequest) (tokenStr string, exp time.Time, body map[string]any, err error) {
+// IssuePasswordToken validates password auth and returns an opaque or JWT token plus Keystone-like token body fields.
+func IssuePasswordToken(db *gorm.DB, mgr *token.Manager, req *PasswordAuthRequest) (tokenStr string, exp time.Time, body map[string]any, err error) {
 	if req == nil {
 		return "", time.Time{}, nil, errors.New("empty auth request")
 	}
@@ -90,16 +91,20 @@ func IssuePasswordToken(db *gorm.DB, j *token.JWT, req *PasswordAuthRequest) (to
 	}
 
 	auditID := uuid.NewString()
-	tokenStr, exp, err = j.Issue(user.ID, dom.ID, projectID, roleNames)
+	tokenStr, exp, err = mgr.Issue(user.ID, dom.ID, projectID, roleNames)
 	if err != nil {
 		return "", time.Time{}, nil, err
 	}
 
-	body = buildTokenEnvelope(user, dom, projectID, roleNames, exp, auditID)
+	cat, err := catalog.Build(db)
+	if err != nil {
+		return "", time.Time{}, nil, err
+	}
+	body = buildTokenEnvelope(user, dom, projectID, roleNames, exp, auditID, cat)
 	return tokenStr, exp, body, nil
 }
 
-func buildTokenEnvelope(user models.User, dom models.Domain, projectID string, roles []string, exp time.Time, auditID string) map[string]any {
+func buildTokenEnvelope(user models.User, dom models.Domain, projectID string, roles []string, exp time.Time, auditID string, catalogObjs []any) map[string]any {
 	issued := time.Now().UTC().Format(time.RFC3339Nano)
 	expires := exp.UTC().Format(time.RFC3339Nano)
 	tok := map[string]any{
@@ -109,7 +114,7 @@ func buildTokenEnvelope(user models.User, dom models.Domain, projectID string, r
 		"expires_at":    expires,
 		"issued_at":     issued,
 		"audit_ids":     []string{auditID},
-		"catalog":       []any{},
+		"catalog":       catalogObjs,
 		"project_scope": projectID != "",
 	}
 	if projectID != "" {

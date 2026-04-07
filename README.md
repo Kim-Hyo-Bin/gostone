@@ -49,9 +49,11 @@ INI files follow a Keystone/oslo-style split: main file plus optional `*.conf` d
   - `GOSTONE_DATABASE_CONNECTION` — overrides `[database] connection` (Keystone-style URL or DSN)
   - `GOSTONE_SQLITE_DSN` — deprecated alias for the same field (SQLite-only name)
   - `GOSTONE_HTTP_ADDR` — `listen` address
-  - `GOSTONE_TOKEN_SECRET` — JWT HMAC secret (**required** in practice; must match `[token] secret` if both are used)
+  - `GOSTONE_PUBLIC_URL` — advertised public base URL for catalog bootstrap (e.g. `http://controller:5000`)
+  - `GOSTONE_TOKEN_PROVIDER` — `uuid` (default) or `jwt`
+  - `GOSTONE_TOKEN_SECRET` — required when `provider=jwt`; optional for `uuid`
 
-Copy `config/gostone.conf.example` and adjust at least `[token] secret`.
+Copy `config/gostone.conf.example` and set **`[token] secret`** if you use `provider=jwt`. For **`provider=uuid`** (default, OpenStack-friendly), the secret is not used.
 
 ## First boot (development)
 
@@ -66,9 +68,10 @@ Then authenticate with Identity API password auth: user `admin`, domain `Default
 ## Quick run
 
 ```bash
-export GOSTONE_TOKEN_SECRET='dev-secret-at-least-32-chars-recommended'
 export GOSTONE_BOOTSTRAP_ADMIN_PASSWORD='admin'
 export GOSTONE_HTTP_ADDR=':5000'
+export GOSTONE_PUBLIC_URL='http://127.0.0.1:5000'
+# Default [token] provider is uuid — no secret needed. For jwt, set GOSTONE_TOKEN_SECRET and provider=jwt.
 ./build/bin/gostone -c config/gostone.conf.example
 ```
 
@@ -89,7 +92,9 @@ curl -sS http://127.0.0.1:5000/v3/users -H "X-Auth-Token: $TOKEN" | head -c 300;
 
 ## Implemented vs. stub
 
-Many v3 routes return **501 Not Implemented**; working pieces include version discovery, `/health`, `POST/GET/HEAD/DELETE /v3/auth/tokens` (JWT), and a subset of user listing/detail with policy checks.
+**Working toward full Keystone replacement:** default **UUID tokens** (persisted, revocable via `DELETE /v3/auth/tokens`), **service catalog** from DB (identity public endpoint seeded on bootstrap), **domains**, **projects**, **roles**, **role assignments** (list), **users** (list/get), and auth token flows. Many extensions (federation, trust, application credentials, LDAP, etc.) still return **501**.
+
+**Not yet equivalent to production Keystone:** **Fernet** tokens (common default in OpenStack), full assignment/grant APIs, catalog editing APIs, revocation lists, and most OS-* extensions. Use A/B tests against real Keystone to close gaps.
 
 ## Tests
 

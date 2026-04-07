@@ -7,9 +7,7 @@ func registerV3StandardCRUD(v3 *gin.RouterGroup, h *Hub) {
 		collection string
 		memberID   string
 	}{
-		{"projects", "project_id"},
 		{"groups", "group_id"},
-		{"domains", "domain_id"},
 		{"regions", "region_id"},
 		{"credentials", "credential_id"},
 		{"endpoints", "endpoint_id"},
@@ -22,7 +20,6 @@ func registerV3StandardCRUD(v3 *gin.RouterGroup, h *Hub) {
 		registerCRUD(v3, r.collection, r.memberID, h)
 	}
 
-	registerAny(v3, "/role_assignments", "/v3/role_assignments", h)
 	registerAny(v3, "/limits/model", "/v3/limits/model", h)
 
 	registerAny(v3, "/ec2tokens", "POST /v3/ec2tokens", h)

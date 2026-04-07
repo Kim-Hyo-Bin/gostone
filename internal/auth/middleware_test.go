@@ -11,9 +11,12 @@ import (
 )
 
 func TestMiddleware_skipAuthPath(t *testing.T) {
-	j := &token.JWT{Secret: []byte("s"), Issuer: "i", TTL: time.Hour}
+	mgr, err := token.NewManager(nil, token.ProviderJWT, "s", time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
 	r := gin.New()
-	r.Use(Middleware(j))
+	r.Use(Middleware(mgr))
 	r.POST("/v3/auth/tokens", func(c *gin.Context) { c.Status(http.StatusTeapot) })
 
 	w := httptest.NewRecorder()
@@ -25,9 +28,12 @@ func TestMiddleware_skipAuthPath(t *testing.T) {
 }
 
 func TestMiddleware_missingToken(t *testing.T) {
-	j := &token.JWT{Secret: []byte("s"), Issuer: "i", TTL: time.Hour}
+	mgr, err := token.NewManager(nil, token.ProviderJWT, "s", time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
 	r := gin.New()
-	r.Use(Middleware(j))
+	r.Use(Middleware(mgr))
 	r.GET("/v3/users", func(c *gin.Context) { c.Status(http.StatusOK) })
 
 	w := httptest.NewRecorder()
@@ -39,9 +45,12 @@ func TestMiddleware_missingToken(t *testing.T) {
 }
 
 func TestMiddleware_invalidToken(t *testing.T) {
-	j := &token.JWT{Secret: []byte("s"), Issuer: "i", TTL: time.Hour}
+	mgr, err := token.NewManager(nil, token.ProviderJWT, "s", time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
 	r := gin.New()
-	r.Use(Middleware(j))
+	r.Use(Middleware(mgr))
 	r.GET("/v3/users", func(c *gin.Context) { c.Status(http.StatusOK) })
 
 	w := httptest.NewRecorder()
@@ -54,15 +63,18 @@ func TestMiddleware_invalidToken(t *testing.T) {
 }
 
 func TestMiddleware_validToken_setsContext(t *testing.T) {
-	j := &token.JWT{Secret: []byte("secret-key-middleware-test"), Issuer: "i", TTL: time.Hour}
-	tok, _, err := j.Issue("uid", "did", "pid", []string{"admin"})
+	mgr, err := token.NewManager(nil, token.ProviderJWT, "secret-key-middleware-test", time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tok, _, err := mgr.Issue("uid", "did", "pid", []string{"admin"})
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	var got Context
 	r := gin.New()
-	r.Use(Middleware(j))
+	r.Use(Middleware(mgr))
 	r.GET("/x", func(c *gin.Context) {
 		var ok bool
 		got, ok = FromGin(c)

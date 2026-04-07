@@ -8,7 +8,8 @@ import (
 
 // Hub carries dependencies shared by HTTP handlers (database, config, etc.).
 type Hub struct {
-	DB     *gorm.DB
-	Tokens *token.JWT
-	Policy *policy.Policy
+	DB        *gorm.DB
+	Tokens    *token.Manager
+	Policy    *policy.Policy
+	PublicURL string // optional advertised public base URL (scheme://host:port)
 }

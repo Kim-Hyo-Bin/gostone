@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/Kim-Hyo-Bin/gostone/internal/api/v3"
@@ -19,17 +20,13 @@ import (
 
 // Run starts the gostone HTTP server using the merged configuration (file + env overrides).
 func Run(cfg *conf.Config) error {
-	if cfg.Token.Secret == "" {
-		return fmt.Errorf("token signing secret is empty: set [token] secret in gostone.conf or GOSTONE_TOKEN_SECRET")
-	}
 	ttl := time.Duration(cfg.Token.ExpirationHours) * time.Hour
 	if cfg.Token.ExpirationHours <= 0 {
 		ttl = 24 * time.Hour
 	}
-	jwtIssuer := &token.JWT{
-		Secret: []byte(cfg.Token.Secret),
-		Issuer: "gostone",
-		TTL:    ttl,
+	prov := strings.ToLower(strings.TrimSpace(cfg.Token.Provider))
+	if prov == token.ProviderJWT && cfg.Token.Secret == "" {
+		return fmt.Errorf("token signing secret is empty for provider=jwt: set [token] secret or GOSTONE_TOKEN_SECRET")
 	}
 
 	gdb, err := db.Open(cfg.Database.Connection)
@@ -39,8 +36,16 @@ func Run(cfg *conf.Config) error {
 	if err := db.AutoMigrate(gdb); err != nil {
 		return fmt.Errorf("migrate: %w", err)
 	}
+	if err := bootstrap.EnsureIdentityCatalog(gdb); err != nil {
+		return fmt.Errorf("catalog bootstrap: %w", err)
+	}
 	if err := bootstrap.FromEnv(gdb); err != nil {
 		return fmt.Errorf("bootstrap: %w", err)
+	}
+
+	mgr, err := token.NewManager(gdb, cfg.Token.Provider, cfg.Token.Secret, ttl)
+	if err != nil {
+		return err
 	}
 
 	if os.Getenv("GIN_MODE") == "" {
@@ -52,9 +57,10 @@ func Run(cfg *conf.Config) error {
 	}
 
 	hub := &v3.Hub{
-		DB:     gdb,
-		Tokens: jwtIssuer,
-		Policy: policy.Default(),
+		DB:        gdb,
+		Tokens:    mgr,
+		Policy:    policy.Default(),
+		PublicURL: cfg.Service.PublicURL,
 	}
 
 	r := gin.New()

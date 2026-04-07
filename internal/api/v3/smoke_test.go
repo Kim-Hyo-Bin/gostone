@@ -27,8 +27,11 @@ func newTestHub(t *testing.T) *Hub {
 	if _, err := testutil.SeedAdmin(gdb, "pass"); err != nil {
 		t.Fatal(err)
 	}
-	j := &token.JWT{Secret: []byte("v3-smoke-test-secret-key"), Issuer: "i", TTL: time.Hour}
-	return &Hub{DB: gdb, Tokens: j, Policy: policy.Default()}
+	mgr, err := token.NewManager(gdb, token.ProviderJWT, "v3-smoke-test-secret-key", time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return &Hub{DB: gdb, Tokens: mgr, Policy: policy.Default()}
 }
 
 func TestRegisterHealth(t *testing.T) {

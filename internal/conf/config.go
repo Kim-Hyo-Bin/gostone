@@ -17,10 +17,14 @@ type Config struct {
 	Service struct {
 		// Listen is the HTTP bind address (host:port or :port), e.g. ":5000".
 		Listen string `ini:"listen"`
+		// PublicURL is the base URL clients use (scheme://host:port), for catalog links and bootstrap identity endpoint. If empty, GOSTONE_PUBLIC_URL or http://127.0.0.1:<port> at bootstrap.
+		PublicURL string `ini:"public_url"`
 	} `ini:"service"`
 
 	Token struct {
-		// Secret is the HMAC key for JWTs (set [token] secret or GOSTONE_TOKEN_SECRET).
+		// Provider is uuid (Keystone-style opaque DB tokens, default) or jwt (signed JWT for dev/tests).
+		Provider string `ini:"provider"`
+		// Secret is the HMAC key when provider=jwt (set [token] secret or GOSTONE_TOKEN_SECRET).
 		Secret string `ini:"secret"`
 		// ExpirationHours is token lifetime in hours.
 		ExpirationHours int `ini:"expiration_hours"`

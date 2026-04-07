@@ -7,7 +7,7 @@ import (
 )
 
 // Middleware validates X-Auth-Token for protected Identity routes (Keystone-style).
-func Middleware(issuer *token.JWT) gin.HandlerFunc {
+func Middleware(mgr *token.Manager) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		c.Header("Vary", "X-Auth-Token")
 
@@ -23,7 +23,7 @@ func Middleware(issuer *token.JWT) gin.HandlerFunc {
 			return
 		}
 
-		claims, err := issuer.Parse(raw)
+		claims, err := mgr.Parse(raw)
 		if err != nil {
 			httperr.Unauthorized(c, "Invalid token.")
 			c.Abort()

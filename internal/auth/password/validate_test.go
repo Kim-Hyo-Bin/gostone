@@ -17,12 +17,15 @@ func TestBuildTokenResponse(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	j := &token.JWT{Secret: []byte("k"), Issuer: "i", TTL: time.Hour}
-	tokStr, _, err := j.Issue(fix.UserID, fix.DomainID, fix.ProjectID, []string{"admin"})
+	mgr, err := token.NewManager(gdb, token.ProviderJWT, "k", time.Hour)
 	if err != nil {
 		t.Fatal(err)
 	}
-	claims, err := j.Parse(tokStr)
+	tokStr, _, err := mgr.Issue(fix.UserID, fix.DomainID, fix.ProjectID, []string{"admin"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	claims, err := mgr.Parse(tokStr)
 	if err != nil {
 		t.Fatal(err)
 	}

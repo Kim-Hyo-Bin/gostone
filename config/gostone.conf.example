@@ -26,9 +26,13 @@ connection = file::memory:?cache=shared
 [service]
 # HTTP listen address (host:port or :port). Keystone public API defaults to 5000.
 listen = :5000
+# Public URL for service catalog + bootstrap (scheme://host:port). Override with GOSTONE_PUBLIC_URL.
+# public_url = http://controller:5000
 
 [token]
-# Required: HMAC secret for JWT access tokens (use a long random value in production).
+# uuid = opaque DB-backed tokens (default; closest to Keystone UUID provider). jwt = signed JWT (dev/tests).
+provider = uuid
+# Required when provider = jwt. Ignored for uuid.
 secret = change-me-in-production
 # Token lifetime in hours.
 expiration_hours = 24

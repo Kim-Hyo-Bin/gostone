@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/Kim-Hyo-Bin/gostone/internal/catalog"
 	"github.com/Kim-Hyo-Bin/gostone/internal/models"
 	"github.com/Kim-Hyo-Bin/gostone/internal/token"
 	"github.com/google/uuid"
@@ -25,5 +26,9 @@ func BuildTokenResponse(db *gorm.DB, claims *token.Claims) (map[string]any, erro
 		exp = claims.ExpiresAt.Time
 	}
 	auditID := uuid.NewString()
-	return buildTokenEnvelope(user, dom, claims.ProjectID, claims.Roles, exp, auditID), nil
+	cat, err := catalog.Build(db)
+	if err != nil {
+		return nil, err
+	}
+	return buildTokenEnvelope(user, dom, claims.ProjectID, claims.Roles, exp, auditID, cat), nil
 }

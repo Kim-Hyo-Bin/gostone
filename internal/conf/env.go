@@ -16,4 +16,10 @@ func applyEnvOverrides(c *Config) {
 	if v := os.Getenv("GOSTONE_TOKEN_SECRET"); v != "" {
 		c.Token.Secret = v
 	}
+	if v := os.Getenv("GOSTONE_TOKEN_PROVIDER"); v != "" {
+		c.Token.Provider = v
+	}
+	if v := os.Getenv("GOSTONE_PUBLIC_URL"); v != "" {
+		c.Service.PublicURL = v
+	}
 }

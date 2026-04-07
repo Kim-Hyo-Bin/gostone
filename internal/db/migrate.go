@@ -13,5 +13,9 @@ func AutoMigrate(gdb *gorm.DB) error {
 		&models.User{},
 		&models.Role{},
 		&models.UserProjectRole{},
+		&models.AuthToken{},
+		&models.Region{},
+		&models.Service{},
+		&models.Endpoint{},
 	)
 }
