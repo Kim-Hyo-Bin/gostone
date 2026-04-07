@@ -7,8 +7,30 @@ A Go-based reimplementation of OpenStack **Keystone**, the identity service for 
 - **Source code**: [openstack/keystone on GitHub](https://github.com/openstack/keystone)
 - **Keystone documentation**: [docs.openstack.org — Keystone](https://docs.openstack.org/keystone/latest/)
 - **Identity API reference**: [docs.openstack.org — Identity API](https://docs.openstack.org/api-ref/identity/)
+- **Install (reference)**: [Ubuntu + Apache](https://docs.openstack.org/keystone/latest/install/keystone-install-ubuntu.html), [RHEL/Rocky (RDO)](https://docs.openstack.org/keystone/latest/install/keystone-install-rdo.html), [DevStack (all-in-one dev cloud)](https://docs.openstack.org/devstack/latest/)
 
-The goal is to port Keystone’s **API surface** so that it can run **standalone**—independent of the rest of the OpenStack stack—while matching the behavior needed for those APIs to operate correctly on their own.
+The goal is to port Keystone’s **API surface** so that it can run **standalone**—independent of the rest of the OpenStack stack—while matching the behavior needed for those APIs to operate correctly on its own.
+
+### Upstream Keystone in Docker (A/B vs gostone)
+
+This repo can run **packaged OpenStack Keystone** (Ubuntu 22.04 **Cloud Archive: Caracal**) beside gostone. It uses **separate ports** so you do not replace the gostone process: Identity API on **15000**, MariaDB on **14306** (gostone’s compose stack keeps **5000** / **13306**).
+
+```bash
+docker compose -f docker-compose.upstream-keystone.yml up -d --build
+./scripts/test-upstream-keystone.sh
+# optional Go smoke test (scoped token; matches default Keystone policy)
+KEYSTONE_UPSTREAM_URL=http://127.0.0.1:15000 go test -tags=upstream -count=1 -v ./internal/integration/...
+# or one shot (compose up, wait for /v3, shell test + Go tests):
+./scripts/integration-upstream-keystone.sh          # or --fresh to reset volumes
+```
+
+The compose file sets **`name: gostone-upstream-keystone`** so this stack is a separate Docker Compose project from the default `docker compose` (MariaDB-only) file—no shared project name or orphan-container noise.
+
+Defaults: DB user `keystone` / password `keystonepass`, bootstrap admin password `admin` (override with `KEYSTONE_ADMIN_PASSWORD`). Reset everything: `docker compose -f docker-compose.upstream-keystone.yml down -v` then `up` again.
+
+Prerequisites for the shell script: **`curl`** and **`python3`** on the host. If you previously used an older compose layout with the same fixed container names, run `./scripts/integration-upstream-keystone.sh --fresh` (it removes stale `keystone-upstream-*` containers before `up`).
+
+**Policy note:** Upstream Keystone typically requires a **project-scoped** token for `GET /v3/users`. The upstream test script and `-tags=upstream` test use scope `admin` @ `Default`; gostone’s MariaDB integration tests still use an unscoped token where gostone allows it—use this stack to spot policy and behavior gaps.
 
 ## Conventions
 
@@ -96,11 +118,55 @@ curl -sS http://127.0.0.1:5000/v3/users -H "X-Auth-Token: $TOKEN" | head -c 300;
 
 **Not yet equivalent to production Keystone:** **Fernet** tokens (common default in OpenStack), full assignment/grant APIs, catalog editing APIs, revocation lists, and most OS-* extensions. Use A/B tests against real Keystone to close gaps.
 
+## MariaDB (Docker, Keystone-style)
+
+Compose brings up **MariaDB 11** with the usual dev naming: database `keystone`, user `keystone` / password `keystonepass`, root `rootpass`. Host port **13306** maps to container `3306` so it does not clash with a local MySQL.
+
+```bash
+docker compose up -d
+# wait until healthy, then either:
+export GOSTONE_BOOTSTRAP_ADMIN_PASSWORD='admin'
+export GOSTONE_DATABASE_CONNECTION='mysql+pymysql://keystone:keystonepass@127.0.0.1:13306/keystone'
+./build/bin/gostone -c config/gostone.docker-mariadb.conf
+```
+
+Integration tests use a separate database **`gostone_integration`** (created by `deploy/mariadb-init/01-gostone-integration-db.sql`):
+
+```bash
+chmod +x scripts/integration-mariadb.sh   # once
+./scripts/integration-mariadb.sh          # or --fresh to reset the volume
+```
+
+Default unit tests stay in-memory SQLite and do **not** require Docker:
+
+```bash
+go test ./...
+```
+
 ## Tests
 
 ```bash
 go test ./...
 go vet ./...
+```
+
+MariaDB integration (optional, requires Docker + `docker compose up`):
+
+```bash
+./scripts/integration-mariadb.sh
+# equivalent:
+# export GOSTONE_DATABASE_CONNECTION='mysql+pymysql://keystone:keystonepass@127.0.0.1:13306/gostone_integration'
+# go test -tags=integration -count=1 -v ./internal/integration/...
+```
+
+Upstream OpenStack Keystone in Docker (optional, separate compose file):
+
+```bash
+./scripts/integration-upstream-keystone.sh --fresh
+# or manually:
+docker compose -f docker-compose.upstream-keystone.yml up -d --build
+./scripts/test-upstream-keystone.sh
+KEYSTONE_UPSTREAM_URL=http://127.0.0.1:15000 go test -tags=upstream -count=1 -v ./internal/integration/...
 ```
 
 Merged coverage across module packages (single profile; target **≥ 60%** for CI):
