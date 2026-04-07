@@ -13,8 +13,8 @@ debug = false
 connection = file::memory:?cache=shared
 
 [service]
-# HTTP listen address (host:port or :port).
-listen = :8080
+# HTTP listen address (host:port or :port). Keystone public API defaults to 5000.
+listen = :5000
 
 [token]
 # Required: HMAC secret for JWT access tokens (use a long random value in production).

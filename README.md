@@ -67,23 +67,23 @@ Then authenticate with Identity API password auth: user `admin`, domain `Default
 ```bash
 export GOSTONE_TOKEN_SECRET='dev-secret-at-least-32-chars-recommended'
 export GOSTONE_BOOTSTRAP_ADMIN_PASSWORD='admin'
-export GOSTONE_HTTP_ADDR=':8080'
+export GOSTONE_HTTP_ADDR=':5000'
 ./build/bin/gostone -c config/gostone.conf.example
 ```
 
 Smoke checks:
 
 ```bash
-curl -sS http://127.0.0.1:8080/health
-curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:8080/   # expect 300
-curl -sS http://127.0.0.1:8080/v3 | head -c 200; echo
+curl -sS http://127.0.0.1:5000/health
+curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:5000/   # expect 300
+curl -sS http://127.0.0.1:5000/v3 | head -c 200; echo
 
-TOKEN=$(curl -sS -X POST http://127.0.0.1:8080/v3/auth/tokens \
+TOKEN=$(curl -sS -X POST http://127.0.0.1:5000/v3/auth/tokens \
   -H 'Content-Type: application/json' \
   -d '{"auth":{"identity":{"methods":["password"],"password":{"user":{"name":"admin","password":"admin","domain":{"name":"Default"}}}}}}' \
   -D- -o /dev/null | sed -n 's/^[Xx]-[Ss]ubject-[Tt]oken: //p' | tr -d '\r')
 
-curl -sS http://127.0.0.1:8080/v3/users -H "X-Auth-Token: $TOKEN" | head -c 300; echo
+curl -sS http://127.0.0.1:5000/v3/users -H "X-Auth-Token: $TOKEN" | head -c 300; echo
 ```
 
 ## Implemented vs. stub
