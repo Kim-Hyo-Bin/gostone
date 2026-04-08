@@ -8,7 +8,7 @@ import (
 
 func TestJWT_IssueEmptySecret(t *testing.T) {
 	j := &JWT{Secret: nil, Issuer: "t", TTL: time.Hour}
-	_, _, err := j.Issue("u", "d", "p", []string{"admin"})
+	_, _, err := j.Issue("u", "d", "p", []string{"admin"}, nil)
 	if err == nil || !strings.Contains(err.Error(), "empty") {
 		t.Fatalf("got %v", err)
 	}
@@ -16,7 +16,7 @@ func TestJWT_IssueEmptySecret(t *testing.T) {
 
 func TestJWT_RoundTrip(t *testing.T) {
 	j := &JWT{Secret: []byte("test-secret-key-for-jwt"), Issuer: "gostone", TTL: time.Hour}
-	tok, exp, err := j.Issue("user-1", "dom-1", "proj-1", []string{"admin", "member"})
+	tok, exp, err := j.Issue("user-1", "dom-1", "proj-1", []string{"admin", "member"}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -37,7 +37,7 @@ func TestJWT_RoundTrip(t *testing.T) {
 
 func TestJWT_ParseWrongSecret(t *testing.T) {
 	j1 := &JWT{Secret: []byte("aaa"), Issuer: "i", TTL: time.Hour}
-	tok, _, err := j1.Issue("u", "d", "", nil)
+	tok, _, err := j1.Issue("u", "d", "", nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

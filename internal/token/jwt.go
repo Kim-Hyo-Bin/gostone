@@ -16,27 +16,22 @@ type JWT struct {
 	TTL    time.Duration
 }
 
-// Claims carried inside the JWT.
-type Claims struct {
-	UserID    string   `json:"uid"`
-	DomainID  string   `json:"dom"`
-	ProjectID string   `json:"prj"`
-	Roles     []string `json:"roles"`
-	jwt.RegisteredClaims
-}
-
 // Issue returns a signed token and its expiry instant.
-func (j *JWT) Issue(userID, domainID, projectID string, roles []string) (string, time.Time, error) {
+func (j *JWT) Issue(userID, domainID, projectID string, roles []string, methods []string) (string, time.Time, error) {
 	if len(j.Secret) == 0 {
 		return "", time.Time{}, errors.New("token secret is empty")
 	}
 	now := time.Now()
 	exp := now.Add(j.TTL)
+	if len(methods) == 0 {
+		methods = []string{"password"}
+	}
 	claims := Claims{
 		UserID:    userID,
 		DomainID:  domainID,
 		ProjectID: projectID,
 		Roles:     roles,
+		Methods:   methods,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(exp),
 			IssuedAt:  jwt.NewNumericDate(now),
@@ -44,7 +39,7 @@ func (j *JWT) Issue(userID, domainID, projectID string, roles []string) (string,
 			ID:        uuid.NewString(),
 		},
 	}
-	t := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	t := jwt.NewWithClaims(jwt.SigningMethodHS256, &claims)
 	s, err := t.SignedString(j.Secret)
 	if err != nil {
 		return "", time.Time{}, err
