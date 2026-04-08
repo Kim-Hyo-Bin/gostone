@@ -17,7 +17,7 @@ func (h *Hub) postAuthTokens(c *gin.Context) {
 		httperr.BadRequest(c, "Malformed request body")
 		return
 	}
-	tok, _, body, err := password.IssuePasswordToken(h.DB, h.Tokens, &req)
+	tok, _, body, err := password.IssueAuthToken(h.DB, h.Tokens, &req)
 	if err != nil {
 		mapAuthError(c, err)
 		return
@@ -67,7 +67,8 @@ func mapAuthError(c *gin.Context, err error) {
 		return
 	}
 	switch {
-	case strings.Contains(msg, "unsupported"), strings.Contains(msg, "required"):
+	case strings.Contains(msg, "unsupported"), strings.Contains(msg, "required"),
+		strings.Contains(msg, "expected exactly one method"):
 		httperr.BadRequest(c, msg)
 	default:
 		httperr.Unauthorized(c, "Authentication failed")
