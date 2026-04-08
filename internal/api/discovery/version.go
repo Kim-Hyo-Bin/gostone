@@ -4,9 +4,58 @@ package discovery
 import (
 	"encoding/json"
 	"net/http"
+	"sync"
 )
 
 const mediaTypeJSON = "application/vnd.openstack.identity-v3+json"
+
+// DocConfig overrides GET / and GET /v3 version document fields (Keystone-style discovery).
+type DocConfig struct {
+	VersionID string // e.g. v3.14
+	Updated   string // RFC3339
+	Status    string // e.g. stable
+}
+
+var (
+	docMu  sync.RWMutex
+	docCfg = DocConfig{
+		VersionID: "v3.14",
+		Updated:   "2020-04-07T00:00:00Z",
+		Status:    "stable",
+	}
+)
+
+// ConfigureDiscovery sets the advertised Identity API version document (safe to call before serving).
+func ConfigureDiscovery(c DocConfig) {
+	docMu.Lock()
+	defer docMu.Unlock()
+	if c.VersionID != "" {
+		docCfg.VersionID = c.VersionID
+	}
+	if c.Updated != "" {
+		docCfg.Updated = c.Updated
+	}
+	if c.Status != "" {
+		docCfg.Status = c.Status
+	}
+}
+
+// ResetDiscoveryDoc restores default discovery document values (for tests).
+func ResetDiscoveryDoc() {
+	docMu.Lock()
+	defer docMu.Unlock()
+	docCfg = DocConfig{
+		VersionID: "v3.14",
+		Updated:   "2020-04-07T00:00:00Z",
+		Status:    "stable",
+	}
+}
+
+func currentDoc() DocConfig {
+	docMu.RLock()
+	defer docMu.RUnlock()
+	return docCfg
+}
 
 type versionDoc struct {
 	ID         string  `json:"id"`
@@ -31,10 +80,11 @@ func identityV3Doc(baseURL string) versionDoc {
 	if u != "" && u[len(u)-1] != '/' {
 		u += "/"
 	}
+	d := currentDoc()
 	return versionDoc{
-		ID:      "v3.14",
-		Status:  "stable",
-		Updated: "2020-04-07T00:00:00Z",
+		ID:      d.VersionID,
+		Status:  d.Status,
+		Updated: d.Updated,
 		Links: []link{
 			{Rel: "self", Href: u},
 		},
@@ -45,12 +95,9 @@ func identityV3Doc(baseURL string) versionDoc {
 }
 
 // PreferredV3URL builds the canonical Identity v3 base URL for this request.
+// When SetTrustForwardedHeaders(true), uses X-Forwarded-Host and X-Forwarded-Proto when present.
 func PreferredV3URL(r *http.Request) string {
-	scheme := "http"
-	if r.TLS != nil {
-		scheme = "https"
-	}
-	return scheme + "://" + r.Host + "/v3/"
+	return forwardedScheme(r) + "://" + forwardedHost(r) + "/v3/"
 }
 
 // ServeRoot handles GET / (version discovery). Matches Keystone: 300 + versions payload + Location.

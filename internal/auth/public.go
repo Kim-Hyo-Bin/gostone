@@ -2,7 +2,7 @@ package auth
 
 import "strings"
 
-// SkipAuth reports routes that must work without X-Auth-Token (Keystone public auth paths).
+// SkipAuth reports routes that must work without a bearer token (Keystone public auth paths).
 func SkipAuth(method, absPath string) bool {
 	method = strings.ToUpper(method)
 	switch absPath {

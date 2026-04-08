@@ -17,21 +17,31 @@ type JWT struct {
 }
 
 // Issue returns a signed token and its expiry instant.
-func (j *JWT) Issue(userID, domainID, projectID string, roles []string, methods []string) (string, time.Time, error) {
+func (j *JWT) Issue(s TokenSubject) (string, time.Time, error) {
+	if err := s.validate(); err != nil {
+		return "", time.Time{}, err
+	}
 	if len(j.Secret) == 0 {
 		return "", time.Time{}, errors.New("token secret is empty")
 	}
 	now := time.Now()
 	exp := now.Add(j.TTL)
-	if len(methods) == 0 {
-		methods = []string{"password"}
-	}
+	methods := s.normalizedMethods()
 	claims := Claims{
-		UserID:    userID,
-		DomainID:  domainID,
-		ProjectID: projectID,
-		Roles:     roles,
-		Methods:   methods,
+		UserID:        s.UserID,
+		DomainID:      s.DomainID,
+		ProjectID:     s.ProjectID,
+		ScopeDomainID: s.ScopeDomainID,
+		Roles:         s.Roles,
+		Methods:       methods,
+		TrustID:            s.TrustID,
+		SystemScope:        s.SystemScope,
+		AppCredID:          s.AppCredID,
+		AccessTokenID:      s.AccessTokenID,
+		Thumbprint:         s.Thumbprint,
+		IdentityProviderID: s.IdentityProviderID,
+		ProtocolID:         s.ProtocolID,
+		FederatedGroupIDs:  append([]string(nil), s.FederatedGroupIDs...),
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(exp),
 			IssuedAt:  jwt.NewNumericDate(now),
@@ -39,12 +49,12 @@ func (j *JWT) Issue(userID, domainID, projectID string, roles []string, methods 
 			ID:        uuid.NewString(),
 		},
 	}
-	t := jwt.NewWithClaims(jwt.SigningMethodHS256, &claims)
-	s, err := t.SignedString(j.Secret)
+	jwtTok := jwt.NewWithClaims(jwt.SigningMethodHS256, &claims)
+	tokStr, err := jwtTok.SignedString(j.Secret)
 	if err != nil {
 		return "", time.Time{}, err
 	}
-	return s, exp, nil
+	return tokStr, exp, nil
 }
 
 // Parse validates a token string and returns claims.

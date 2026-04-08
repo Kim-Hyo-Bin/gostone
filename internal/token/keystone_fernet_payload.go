@@ -148,6 +148,37 @@ func PackKeystoneFernetUnscoped(userID string, methods []string, exp time.Time, 
 	return msgpack.Marshal(ver)
 }
 
+// PackKeystoneFernetDomainScoped builds msgpack for Keystone DomainScopedPayload (version 1).
+func PackKeystoneFernetDomainScoped(userID, domainID string, methods []string, exp time.Time, auditIDs []string, authOrder []string) ([]byte, error) {
+	u0, err := packUserOrString(userID)
+	if err != nil {
+		return nil, err
+	}
+	d0, err := packUserOrString(domainID)
+	if err != nil {
+		return nil, err
+	}
+	audBytes, err := auditStringsToBytes(auditIDs)
+	if err != nil {
+		return nil, err
+	}
+	mi := MethodsToInt(authOrder, methods)
+	expF := keystoneExpiresFloat(exp)
+	audList := make([]interface{}, len(audBytes))
+	for i, b := range audBytes {
+		audList[i] = b
+	}
+	ver := []interface{}{
+		1,
+		u0,
+		mi,
+		d0,
+		expF,
+		audList,
+	}
+	return msgpack.Marshal(ver)
+}
+
 // PackKeystoneFernetProjectScoped builds msgpack for ProjectScopedPayload (version 2).
 func PackKeystoneFernetProjectScoped(userID, projectID string, methods []string, exp time.Time, auditIDs []string, authOrder []string) ([]byte, error) {
 	u0, err := packUserOrString(userID)
@@ -179,53 +210,62 @@ func PackKeystoneFernetProjectScoped(userID, projectID string, methods []string,
 	return msgpack.Marshal(ver)
 }
 
-// UnpackKeystoneFernetPayload decrypts msgpack and returns fields needed for Claims.
-// Domain ID is not stored in Keystone project/unscoped payloads; load from the user row.
-func UnpackKeystoneFernetPayload(plain []byte, authOrder []string) (userID, projectID string, methods []string, exp time.Time, err error) {
+// FernetDecoded is the scope extracted from a decrypted Keystone Fernet payload (all supported versions).
+type FernetDecoded struct {
+	Version int
+	// Core identity / scope (versions 0–2, 5–7, 9–10)
+	UserID        string
+	ProjectID     string
+	ScopeDomainID string
+	Methods       []string
+	Exp           time.Time
+
+	TrustID           string
+	SystemScope       string
+	AppCredID         string
+	AccessTokenID     string
+	Thumbprint        string
+	FederatedGroupIDs []string
+	IdentityProvider  string
+	ProtocolID        string
+}
+
+// UnpackKeystoneFernetPayload decodes Keystone msgpack (version prefix + payload tuple).
+// Layout matches openstack/keystone token_formatters.py _PAYLOAD_CLASSES.
+func UnpackKeystoneFernetPayload(plain []byte, authOrder []string) (FernetDecoded, error) {
 	var raw []interface{}
-	if err = msgpack.Unmarshal(plain, &raw); err != nil {
-		err = fmt.Errorf("msgpack: %w", err)
-		return
+	if err := msgpack.Unmarshal(plain, &raw); err != nil {
+		return FernetDecoded{}, fmt.Errorf("msgpack: %w", err)
 	}
 	if len(raw) < 2 {
-		err = fmt.Errorf("payload too short")
-		return
+		return FernetDecoded{}, fmt.Errorf("payload too short")
 	}
 	ver := toInt(raw[0])
 	switch ver {
 	case 0:
-		if len(raw) < 5 {
-			err = fmt.Errorf("unscoped payload too short")
-			return
-		}
-		userID, err = unpackUserOrString(raw[1])
-		if err != nil {
-			return
-		}
-		mi := toInt(raw[2])
-		methods = IntToMethods(authOrder, mi)
-		exp = keystoneExpiresFromFloat(toFloat(raw[3]))
-		return
+		return unpackFernetV0Unscoped(raw, authOrder)
+	case 1:
+		return unpackFernetV1Domain(raw, authOrder)
 	case 2:
-		if len(raw) < 6 {
-			err = fmt.Errorf("project payload too short")
-			return
-		}
-		userID, err = unpackUserOrString(raw[1])
-		if err != nil {
-			return
-		}
-		mi := toInt(raw[2])
-		methods = IntToMethods(authOrder, mi)
-		projectID, err = unpackUserOrString(raw[3])
-		if err != nil {
-			return
-		}
-		exp = keystoneExpiresFromFloat(toFloat(raw[4]))
-		return
+		return unpackFernetV2Project(raw, authOrder)
+	case 3:
+		return unpackFernetV3Trust(raw, authOrder)
+	case 4:
+		return unpackFernetV4FederatedUnscoped(raw, authOrder)
+	case 5:
+		return unpackFederatedScoped(raw, authOrder, true, false)
+	case 6:
+		return unpackFederatedScoped(raw, authOrder, false, true)
+	case 7:
+		return unpackFernetV7OAuth(raw, authOrder)
+	case 8:
+		return unpackFernetV8System(raw, authOrder)
+	case 9:
+		return unpackFernetV9AppCred(raw, authOrder)
+	case 10:
+		return unpackFernetV10OAuth2MTLS(raw, authOrder)
 	default:
-		err = fmt.Errorf("unsupported fernet payload version %d", ver)
-		return
+		return FernetDecoded{}, fmt.Errorf("unsupported keystone fernet payload version %d", ver)
 	}
 }
 

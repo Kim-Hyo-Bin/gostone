@@ -34,5 +34,13 @@ func BuildTokenResponse(db *gorm.DB, claims *token.Claims) (map[string]any, erro
 	if len(methods) == 0 {
 		methods = []string{"password"}
 	}
-	return buildTokenEnvelope(user, dom, claims.ProjectID, claims.Roles, exp, auditID, cat, methods), nil
+	var scopedDom *models.Domain
+	if claims.ScopeDomainID != "" {
+		var d models.Domain
+		if err := db.Where("id = ?", claims.ScopeDomainID).First(&d).Error; err != nil {
+			return nil, fmt.Errorf("scope domain: %w", err)
+		}
+		scopedDom = &d
+	}
+	return buildTokenEnvelope(user, dom, claims.ProjectID, scopedDom, claims.Roles, exp, auditID, cat, methods), nil
 }

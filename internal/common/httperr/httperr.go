@@ -4,15 +4,12 @@ package httperr
 import (
 	"net/http"
 
+	"github.com/Kim-Hyo-Bin/gostone/internal/api/discovery"
 	"github.com/gin-gonic/gin"
 )
 
 func keystoneURI(c *gin.Context) string {
-	scheme := "http"
-	if c.Request.TLS != nil {
-		scheme = "https"
-	}
-	return scheme + "://" + c.Request.Host + "/v3/"
+	return discovery.PreferredV3URL(c.Request)
 }
 
 // Unauthorized responds like Keystone (401 + WWW-Authenticate).
@@ -44,6 +41,17 @@ func Forbidden(c *gin.Context, message string) {
 		"error": gin.H{
 			"code":    http.StatusForbidden,
 			"title":   "Forbidden",
+			"message": message,
+		},
+	})
+}
+
+// InternalServerError responds with HTTP 500 (unexpected server-side failures).
+func InternalServerError(c *gin.Context, message string) {
+	c.JSON(http.StatusInternalServerError, gin.H{
+		"error": gin.H{
+			"code":    http.StatusInternalServerError,
+			"title":   "Internal Server Error",
 			"message": message,
 		},
 	})

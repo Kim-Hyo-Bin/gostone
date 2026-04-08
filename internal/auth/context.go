@@ -7,7 +7,9 @@ type Context struct {
 	UserID    string
 	DomainID  string
 	ProjectID string
-	Roles     []string
+	// ScopeDomainID is set for Keystone domain-scoped tokens (empty for project/unscoped).
+	ScopeDomainID string
+	Roles         []string
 }
 
 // GinKey is the Gin context key for Context.

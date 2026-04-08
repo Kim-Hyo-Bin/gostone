@@ -2,20 +2,27 @@
 package app
 
 import (
+	"context"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
+	"github.com/Kim-Hyo-Bin/gostone/internal/api/discovery"
 	"github.com/Kim-Hyo-Bin/gostone/internal/api/v3"
 	"github.com/Kim-Hyo-Bin/gostone/internal/bootstrap"
 	"github.com/Kim-Hyo-Bin/gostone/internal/conf"
 	"github.com/Kim-Hyo-Bin/gostone/internal/db"
+	"github.com/Kim-Hyo-Bin/gostone/internal/listenctx"
 	"github.com/Kim-Hyo-Bin/gostone/internal/policy"
 	"github.com/Kim-Hyo-Bin/gostone/internal/server"
 	"github.com/Kim-Hyo-Bin/gostone/internal/token"
 	"github.com/gin-gonic/gin"
+	"golang.org/x/sync/errgroup"
 )
 
 // Run starts the gostone HTTP server using the merged configuration (file + env overrides).
@@ -36,7 +43,18 @@ func Run(cfg *conf.Config) error {
 	if err := db.AutoMigrate(gdb); err != nil {
 		return fmt.Errorf("migrate: %w", err)
 	}
-	if err := bootstrap.EnsureIdentityCatalog(gdb); err != nil {
+	discovery.ConfigureDiscovery(discovery.DocConfig{
+		VersionID: strings.TrimSpace(cfg.Discovery.APIVersionID),
+		Updated:   strings.TrimSpace(cfg.Discovery.Updated),
+		Status:    strings.TrimSpace(cfg.Discovery.Status),
+	})
+	discovery.SetTrustForwardedHeaders(cfg.Service.TrustForwardedHeaders)
+	if err := bootstrap.EnsureIdentityCatalog(gdb,
+		strings.TrimSpace(cfg.Service.PublicURL),
+		strings.TrimSpace(cfg.Service.AdminURL),
+		strings.TrimSpace(cfg.Service.InternalURL),
+		strings.TrimSpace(cfg.Service.RegionID),
+	); err != nil {
 		return fmt.Errorf("catalog bootstrap: %w", err)
 	}
 	if err := bootstrap.FromEnv(gdb); err != nil {
@@ -80,14 +98,64 @@ func Run(cfg *conf.Config) error {
 		PublicURL: cfg.Service.PublicURL,
 	}
 
-	r := gin.New()
-	r.Use(gin.Recovery(), gin.Logger())
-	server.Register(r, hub)
-
-	addr := cfg.Service.Listen
-	log.Printf("gostone listening on %s", addr)
-	if err := r.Run(addr); err != nil {
-		return fmt.Errorf("http server: %w", err)
+	bindings, err := conf.ListenBindings(&cfg.Service)
+	if err != nil {
+		return err
 	}
-	return nil
+	engine := server.NewEngine(hub, server.EngineOptions{
+		EnforceAdminOnly:  cfg.Service.EnforceAdminOnlyRoutes,
+		AdminOnlyPrefixes: conf.ParseCommaList(cfg.Service.AdminOnlyPathPrefixes),
+	})
+
+	shutdownSec := cfg.Service.ShutdownTimeoutSeconds
+	if shutdownSec <= 0 {
+		shutdownSec = 15
+	}
+
+	servers := make([]*http.Server, len(bindings))
+	var g errgroup.Group
+	for i := range bindings {
+		b := bindings[i]
+		h := listenctx.WrapHandler(b.Name, engine)
+		srv := &http.Server{Addr: b.Addr, Handler: h}
+		servers[i] = srv
+		g.Go(func() error {
+			log.Printf("gostone listening (%s) %s", b.Name, b.Addr)
+			err := srv.ListenAndServe()
+			if err == http.ErrServerClosed {
+				return nil
+			}
+			if err != nil {
+				return fmt.Errorf("http %s %s: %w", b.Name, b.Addr, err)
+			}
+			return nil
+		})
+	}
+
+	errCh := make(chan error, 1)
+	go func() { errCh <- g.Wait() }()
+
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+	defer signal.Stop(sigCh)
+
+	select {
+	case err := <-errCh:
+		return err
+	case <-sigCh:
+		log.Print("gostone: shutting down...")
+		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(shutdownSec)*time.Second)
+		defer cancel()
+		for _, srv := range servers {
+			if srv == nil {
+				continue
+			}
+			if err := srv.Shutdown(ctx); err != nil {
+				log.Printf("gostone: shutdown: %v", err)
+			}
+		}
+		_ = g.Wait()
+		log.Print("gostone: stopped")
+		return nil
+	}
 }

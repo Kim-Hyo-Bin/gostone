@@ -41,7 +41,7 @@ func TestMariaDB_bootstrapAndPasswordAuth(t *testing.T) {
 	if err := db.AutoMigrate(gdb); err != nil {
 		t.Fatalf("AutoMigrate: %v", err)
 	}
-	if err := bootstrap.EnsureIdentityCatalog(gdb); err != nil {
+	if err := bootstrap.EnsureIdentityCatalog(gdb, "", "", "", ""); err != nil {
 		t.Fatalf("EnsureIdentityCatalog: %v", err)
 	}
 
@@ -92,7 +92,7 @@ func TestMariaDB_httpListUsers(t *testing.T) {
 	if err := db.AutoMigrate(gdb); err != nil {
 		t.Fatal(err)
 	}
-	if err := bootstrap.EnsureIdentityCatalog(gdb); err != nil {
+	if err := bootstrap.EnsureIdentityCatalog(gdb, "", "", "", ""); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("GOSTONE_BOOTSTRAP_ADMIN_PASSWORD", envOr("GOSTONE_BOOTSTRAP_ADMIN_PASSWORD", "admin"))

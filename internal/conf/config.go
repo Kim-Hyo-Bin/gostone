@@ -14,12 +14,8 @@ type Config struct {
 		Connection string `ini:"connection"`
 	} `ini:"database"`
 
-	Service struct {
-		// Listen is the HTTP bind address (host:port or :port), e.g. ":5000".
-		Listen string `ini:"listen"`
-		// PublicURL is the base URL clients use (scheme://host:port), for catalog links and bootstrap identity endpoint. If empty, GOSTONE_PUBLIC_URL or http://127.0.0.1:<port> at bootstrap.
-		PublicURL string `ini:"public_url"`
-	} `ini:"service"`
+	// Service is [service] (HTTP listeners, catalog URL, region).
+	Service Service `ini:"service"`
 
 	Token struct {
 		// Provider is uuid (Keystone-style opaque DB tokens, default) or jwt (signed JWT for dev/tests).
@@ -45,4 +41,11 @@ type Config struct {
 	Policy struct {
 		File string `ini:"file"`
 	} `ini:"policy"`
+
+	// Discovery controls GET / and GET /v3 version advertisement (Identity API discovery).
+	Discovery struct {
+		APIVersionID string `ini:"api_version_id"`
+		Updated      string `ini:"updated"`
+		Status       string `ini:"status"`
+	} `ini:"discovery"`
 }

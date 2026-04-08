@@ -74,13 +74,20 @@ func issuePasswordFlow(db *gorm.DB, mgr *token.Manager, req *PasswordAuthRequest
 		return "", time.Time{}, nil, errors.New("invalid password")
 	}
 
-	projectID, roleNames, err := pickProjectAndRoles(db, user.ID, dom.ID, req.Auth.Scope)
+	rs, err := ResolveAuthScope(db, user.ID, dom.ID, req.Auth.Scope)
 	if err != nil {
 		return "", time.Time{}, nil, err
 	}
 
 	auditID := uuid.NewString()
-	tokenStr, exp, err = mgr.IssueWithMethods(user.ID, dom.ID, projectID, roleNames, []string{"password"})
+	tokenStr, exp, err = mgr.IssueToken(token.TokenSubject{
+		UserID:        user.ID,
+		DomainID:      dom.ID,
+		ProjectID:     rs.ProjectID,
+		ScopeDomainID: rs.ScopeDomainID,
+		Roles:         rs.Roles,
+		Methods:       []string{"password"},
+	})
 	if err != nil {
 		return "", time.Time{}, nil, err
 	}
@@ -89,7 +96,12 @@ func issuePasswordFlow(db *gorm.DB, mgr *token.Manager, req *PasswordAuthRequest
 	if err != nil {
 		return "", time.Time{}, nil, err
 	}
-	body = buildTokenEnvelope(user, dom, projectID, roleNames, exp, auditID, cat, []string{"password"})
+	var scopedPtr *models.Domain
+	if rs.ScopeDomainID != "" {
+		d := rs.ScopedDomain
+		scopedPtr = &d
+	}
+	body = buildTokenEnvelope(user, dom, rs.ProjectID, scopedPtr, rs.Roles, exp, auditID, cat, []string{"password"})
 	return tokenStr, exp, body, nil
 }
 
@@ -114,28 +126,48 @@ func issueTokenFlow(db *gorm.DB, mgr *token.Manager, req *PasswordAuthRequest) (
 		return "", time.Time{}, nil, fmt.Errorf("domain: %w", err)
 	}
 
-	var projectID string
-	var roleNames []string
+	var rs ResolvedAuthScope
 	if req.Auth.Scope != nil {
-		projectID, roleNames, err = pickProjectAndRoles(db, user.ID, dom.ID, req.Auth.Scope)
+		rs, err = ResolveAuthScope(db, user.ID, dom.ID, req.Auth.Scope)
 		if err != nil {
 			return "", time.Time{}, nil, err
 		}
 	} else if claims.ProjectID != "" {
-		projectID = claims.ProjectID
-		roleNames, err = rolesForProject(db, user.ID, projectID)
+		var pr []string
+		pr, err = rolesForProject(db, user.ID, claims.ProjectID)
 		if err != nil {
 			return "", time.Time{}, nil, err
 		}
+		rs = ResolvedAuthScope{ProjectID: claims.ProjectID, Roles: pr}
+	} else if claims.ScopeDomainID != "" {
+		if claims.ScopeDomainID != user.DomainID {
+			return "", time.Time{}, nil, errors.New("invalid token domain scope for user")
+		}
+		var sdom models.Domain
+		if err := db.Where("id = ?", claims.ScopeDomainID).First(&sdom).Error; err != nil {
+			return "", time.Time{}, nil, fmt.Errorf("scope domain: %w", err)
+		}
+		dr, err2 := rolesForDomainAssignments(db, user.ID, claims.ScopeDomainID)
+		if err2 != nil {
+			return "", time.Time{}, nil, err2
+		}
+		rs = ResolvedAuthScope{ScopeDomainID: claims.ScopeDomainID, Roles: dr, ScopedDomain: sdom}
 	} else {
-		projectID, roleNames, err = pickProjectAndRoles(db, user.ID, dom.ID, nil)
+		rs, err = pickUnscopedOrAggregate(db, user.ID, dom.ID)
 		if err != nil {
 			return "", time.Time{}, nil, err
 		}
 	}
 
 	auditID := uuid.NewString()
-	tokenStr, exp, err = mgr.IssueWithMethods(user.ID, dom.ID, projectID, roleNames, []string{"token"})
+	tokenStr, exp, err = mgr.IssueToken(token.TokenSubject{
+		UserID:        user.ID,
+		DomainID:      dom.ID,
+		ProjectID:     rs.ProjectID,
+		ScopeDomainID: rs.ScopeDomainID,
+		Roles:         rs.Roles,
+		Methods:       []string{"token"},
+	})
 	if err != nil {
 		return "", time.Time{}, nil, err
 	}
@@ -143,6 +175,11 @@ func issueTokenFlow(db *gorm.DB, mgr *token.Manager, req *PasswordAuthRequest) (
 	if err != nil {
 		return "", time.Time{}, nil, err
 	}
-	body = buildTokenEnvelope(user, dom, projectID, roleNames, exp, auditID, cat, []string{"token"})
+	var scopedPtr *models.Domain
+	if rs.ScopeDomainID != "" {
+		d := rs.ScopedDomain
+		scopedPtr = &d
+	}
+	body = buildTokenEnvelope(user, dom, rs.ProjectID, scopedPtr, rs.Roles, exp, auditID, cat, []string{"token"})
 	return tokenStr, exp, body, nil
 }

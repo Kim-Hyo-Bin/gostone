@@ -55,3 +55,51 @@ func TestFernetIssueParseRoundTrip(t *testing.T) {
 		t.Fatalf("exp mismatch: claims=%v issue=%v", claims.ExpiresAt, exp)
 	}
 }
+
+func TestFernetDomainScopeRoundTrip(t *testing.T) {
+	key := make([]byte, 32)
+	for i := range key {
+		key[i] = byte(20 + i)
+	}
+	enc := base64.URLEncoding.EncodeToString(key)
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "0"), []byte(enc), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	mgr, err := NewManagerWithConfig(Config{
+		DB:            nil,
+		Provider:      ProviderFernet,
+		TTL:           time.Hour,
+		FernetKeyRepo: dir,
+		AuthMethods:   DefaultAuthMethods(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tok, exp, err := mgr.IssueToken(TokenSubject{
+		UserID:        "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+		DomainID:      "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+		ScopeDomainID: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+		Roles:         []string{"reader"},
+		Methods:       []string{"password"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	claims, err := mgr.Parse(tok)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if claims.ScopeDomainID != "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb" {
+		t.Fatalf("scope domain: %+v", claims)
+	}
+	if claims.ProjectID != "" {
+		t.Fatalf("expected no project: %+v", claims)
+	}
+	if claims.ExpiresAt == nil || !claims.ExpiresAt.Time.Equal(exp.UTC().Truncate(time.Second)) {
+		t.Fatalf("exp mismatch")
+	}
+}

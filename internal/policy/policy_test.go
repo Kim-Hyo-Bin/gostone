@@ -55,7 +55,7 @@ func TestAllow_unknownAction_authenticated(t *testing.T) {
 
 func TestEvalOr_nilTarget(t *testing.T) {
 	p := Default()
-	if !p.evalOr("user_match or role:admin", auth.Context{UserID: "1", Roles: []string{"admin"}}, nil) {
+	if !p.evalOr("user_match or role:admin", auth.Context{UserID: "1", Roles: []string{"admin"}}, nil, 0) {
 		t.Fatal("nil target should become empty map")
 	}
 }

@@ -34,39 +34,46 @@ const (
 
 // Issue issues a token with default auth method ["password"] when methods is nil.
 func (m *Manager) Issue(userID, domainID, projectID string, roles []string) (string, time.Time, error) {
-	return m.IssueWithMethods(userID, domainID, projectID, roles, nil)
+	return m.IssueToken(TokenSubject{UserID: userID, DomainID: domainID, ProjectID: projectID, Roles: roles})
 }
 
 // IssueWithMethods issues a token; if methods is empty, ["password"] is used.
 func (m *Manager) IssueWithMethods(userID, domainID, projectID string, roles []string, methods []string) (string, time.Time, error) {
-	if len(methods) == 0 {
-		methods = []string{"password"}
+	return m.IssueToken(TokenSubject{UserID: userID, DomainID: domainID, ProjectID: projectID, Roles: roles, Methods: methods})
+}
+
+// IssueToken issues a token from a full subject (project scope, domain scope, or neither).
+func (m *Manager) IssueToken(s TokenSubject) (string, time.Time, error) {
+	if err := s.validate(); err != nil {
+		return "", time.Time{}, err
 	}
+	methods := s.normalizedMethods()
 	switch strings.ToLower(strings.TrimSpace(m.Provider)) {
 	case "", ProviderUUID:
-		return m.issueUUID(userID, domainID, projectID, roles, methods)
+		return m.issueUUID(s.UserID, s.DomainID, s.ProjectID, s.ScopeDomainID, s.Roles, methods)
 	case ProviderJWT:
 		if m.JWT == nil {
 			return "", time.Time{}, errors.New("jwt token provider not configured")
 		}
-		return m.JWT.Issue(userID, domainID, projectID, roles, methods)
+		return m.JWT.Issue(s)
 	case ProviderFernet:
-		return m.issueFernet(userID, domainID, projectID, roles, methods)
+		return m.issueFernet(s.UserID, s.DomainID, s.ProjectID, s.ScopeDomainID, s.Roles, methods)
 	default:
 		return "", time.Time{}, fmt.Errorf("unknown token provider %q", m.Provider)
 	}
 }
 
-func (m *Manager) issueUUID(userID, domainID, projectID string, roles []string, methods []string) (string, time.Time, error) {
+func (m *Manager) issueUUID(userID, domainID, projectID, scopeDomainID string, roles []string, methods []string) (string, time.Time, error) {
 	if m.DB == nil {
 		return "", time.Time{}, errors.New("database required for uuid token provider")
 	}
 	b, err := json.Marshal(struct {
-		Roles    []string `json:"roles"`
-		Methods  []string `json:"methods"`
-		DomainID string   `json:"domain_id"`
-		ProjID   string   `json:"project_id"`
-	}{Roles: roles, Methods: methods, DomainID: domainID, ProjID: projectID})
+		Roles           []string `json:"roles"`
+		Methods         []string `json:"methods"`
+		DomainID        string   `json:"domain_id"`
+		ProjID          string   `json:"project_id"`
+		ScopeDomainID   string   `json:"scope_domain_id"`
+	}{Roles: roles, Methods: methods, DomainID: domainID, ProjID: projectID, ScopeDomainID: scopeDomainID})
 	if err != nil {
 		return "", time.Time{}, err
 	}
@@ -89,7 +96,7 @@ func (m *Manager) issueUUID(userID, domainID, projectID string, roles []string, 
 	return id, exp, nil
 }
 
-func (m *Manager) issueFernet(userID, domainID, projectID string, roles []string, methods []string) (string, time.Time, error) {
+func (m *Manager) issueFernet(userID, domainID, projectID, scopeDomainID string, roles []string, methods []string) (string, time.Time, error) {
 	if len(m.FernetKeys) == 0 {
 		return "", time.Time{}, errors.New("no fernet keys loaded")
 	}
@@ -102,10 +109,13 @@ func (m *Manager) issueFernet(userID, domainID, projectID string, roles []string
 
 	var plain []byte
 	var err error
-	if projectID == "" {
-		plain, err = PackKeystoneFernetUnscoped(userID, methods, exp, auditIDs, m.AuthMethodOrder)
-	} else {
+	switch {
+	case projectID != "":
 		plain, err = PackKeystoneFernetProjectScoped(userID, projectID, methods, exp, auditIDs, m.AuthMethodOrder)
+	case scopeDomainID != "":
+		plain, err = PackKeystoneFernetDomainScoped(userID, scopeDomainID, methods, exp, auditIDs, m.AuthMethodOrder)
+	default:
+		plain, err = PackKeystoneFernetUnscoped(userID, methods, exp, auditIDs, m.AuthMethodOrder)
 	}
 	if err != nil {
 		return "", time.Time{}, err
@@ -117,7 +127,10 @@ func (m *Manager) issueFernet(userID, domainID, projectID string, roles []string
 	// Persist roles for middleware (Fernet payload does not carry role names).
 	// Row primary key is a fixed-length hash (Fernet strings exceed varchar(64)).
 	if m.DB != nil {
-		rb, _ := json.Marshal(roles)
+		rb, err := json.Marshal(roles)
+		if err != nil {
+			return "", time.Time{}, fmt.Errorf("marshal fernet token roles: %w", err)
+		}
 		row := models.AuthToken{
 			ID:        fernetShadowID(tok),
 			UserID:    userID,
@@ -128,7 +141,9 @@ func (m *Manager) issueFernet(userID, domainID, projectID string, roles []string
 			ExpiresAt: exp,
 			RevokedAt: nil,
 		}
-		_ = m.DB.Create(&row).Error // best-effort shadow row for role lookup
+		if err := m.DB.Create(&row).Error; err != nil {
+			return "", time.Time{}, fmt.Errorf("could not store fernet token metadata: %w", err)
+		}
 	}
 	return tok, exp, nil
 }
@@ -173,14 +188,16 @@ func (m *Manager) parseUUID(tokenStr string) (*Claims, error) {
 	methods := []string{"password"}
 	domainID := row.DomainID
 	projectID := row.ProjectID
+	scopeDomainID := ""
 	if row.RolesJSON != "" {
 		rj := strings.TrimSpace(row.RolesJSON)
 		if strings.HasPrefix(rj, "{") {
 			var meta struct {
-				Roles    []string `json:"roles"`
-				Methods  []string `json:"methods"`
-				DomainID string   `json:"domain_id"`
-				ProjID   string   `json:"project_id"`
+				Roles           []string `json:"roles"`
+				Methods         []string `json:"methods"`
+				DomainID        string   `json:"domain_id"`
+				ProjID          string   `json:"project_id"`
+				ScopeDomainID   string   `json:"scope_domain_id"`
 			}
 			if err := json.Unmarshal([]byte(row.RolesJSON), &meta); err == nil {
 				roles = meta.Roles
@@ -193,17 +210,19 @@ func (m *Manager) parseUUID(tokenStr string) (*Claims, error) {
 				if meta.ProjID != "" {
 					projectID = meta.ProjID
 				}
+				scopeDomainID = meta.ScopeDomainID
 			}
 		} else {
 			_ = json.Unmarshal([]byte(row.RolesJSON), &roles)
 		}
 	}
 	return &Claims{
-		UserID:    row.UserID,
-		DomainID:  domainID,
-		ProjectID: projectID,
-		Roles:     roles,
-		Methods:   methods,
+		UserID:        row.UserID,
+		DomainID:      domainID,
+		ProjectID:     projectID,
+		ScopeDomainID: scopeDomainID,
+		Roles:         roles,
+		Methods:       methods,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ID:        row.ID,
 			IssuedAt:  jwt.NewNumericDate(row.IssuedAt),
@@ -217,10 +236,11 @@ func (m *Manager) parseFernet(tokenStr string) (*Claims, error) {
 	if err != nil {
 		return nil, err
 	}
-	userID, projectID, methods, expPayload, err := UnpackKeystoneFernetPayload(plain, m.AuthMethodOrder)
+	fd, err := UnpackKeystoneFernetPayload(plain, m.AuthMethodOrder)
 	if err != nil {
 		return nil, err
 	}
+	expPayload := fd.Exp
 	if !expPayload.IsZero() && time.Now().After(expPayload) {
 		return nil, errors.New("token expired")
 	}
@@ -232,25 +252,40 @@ func (m *Manager) parseFernet(tokenStr string) (*Claims, error) {
 	domainID := ""
 	if m.DB != nil {
 		var row models.AuthToken
-		if err := m.DB.Where("id = ?", fernetShadowID(tokenStr)).First(&row).Error; err == nil {
-			if row.RevokedAt != nil {
-				return nil, errors.New("token revoked")
+		if err := m.DB.Where("id = ?", fernetShadowID(tokenStr)).First(&row).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil, ErrFernetShadowMissing
 			}
-			_ = json.Unmarshal([]byte(row.RolesJSON), &roles)
+			return nil, err
+		}
+		if row.RevokedAt != nil {
+			return nil, errors.New("token revoked")
+		}
+		if err := json.Unmarshal([]byte(row.RolesJSON), &roles); err != nil {
+			return nil, fmt.Errorf("fernet token roles: %w", err)
 		}
 	}
 	if domainID == "" && m.DB != nil {
 		var u models.User
-		if err := m.DB.Where("id = ?", userID).First(&u).Error; err == nil {
+		if err := m.DB.Where("id = ?", fd.UserID).First(&u).Error; err == nil {
 			domainID = u.DomainID
 		}
 	}
 	return &Claims{
-		UserID:    userID,
-		DomainID:  domainID,
-		ProjectID: projectID,
-		Roles:     roles,
-		Methods:   methods,
+		UserID:        fd.UserID,
+		DomainID:      domainID,
+		ProjectID:     fd.ProjectID,
+		ScopeDomainID: fd.ScopeDomainID,
+		Roles:         roles,
+		Methods:       fd.Methods,
+		TrustID:            fd.TrustID,
+		SystemScope:        fd.SystemScope,
+		AppCredID:          fd.AppCredID,
+		AccessTokenID:      fd.AccessTokenID,
+		Thumbprint:         fd.Thumbprint,
+		IdentityProviderID: fd.IdentityProvider,
+		ProtocolID:         fd.ProtocolID,
+		FederatedGroupIDs:  append([]string(nil), fd.FederatedGroupIDs...),
 		RegisteredClaims: jwt.RegisteredClaims{
 			ID:        tokenStr,
 			IssuedAt:  jwt.NewNumericDate(issued),

@@ -6,6 +6,8 @@ import (
 	"github.com/Kim-Hyo-Bin/gostone/internal/auth"
 )
 
+const maxRuleDepth = 64
+
 // Policy is a minimal Keystone-style rule map (action → expression).
 // Only a few rules are evaluated; unknown actions fall back to DefaultRule.
 type Policy struct {
@@ -96,31 +98,83 @@ func Default() *Policy {
 }
 
 // Allow evaluates the rule for action using token context and optional targets (e.g. user_id).
+// Rule strings follow oslo.policy: "a or b", "a and b", and "rule:named_rule" indirection.
 func (p *Policy) Allow(action string, ctx auth.Context, target map[string]string) bool {
 	rule, ok := p.Rules[action]
 	if !ok {
 		rule = p.DefaultRule
 	}
-	return p.evalOr(rule, ctx, target)
+	return p.evalOr(rule, ctx, target, 0)
 }
 
-func (p *Policy) evalOr(rule string, ctx auth.Context, target map[string]string) bool {
+func (p *Policy) evalOr(rule string, ctx auth.Context, target map[string]string, depth int) bool {
+	if depth > maxRuleDepth {
+		return false
+	}
 	if target == nil {
 		target = map[string]string{}
 	}
-	for _, part := range strings.Split(rule, " or ") {
-		part = strings.TrimSpace(part)
-		if p.evalAtom(part, ctx, target) {
+	for _, branch := range strings.Split(rule, " or ") {
+		branch = strings.TrimSpace(branch)
+		if branch == "" {
+			continue
+		}
+		if p.evalAnd(branch, ctx, target, depth) {
 			return true
 		}
 	}
 	return false
 }
 
-func (p *Policy) evalAtom(part string, ctx auth.Context, target map[string]string) bool {
+func (p *Policy) evalAnd(rule string, ctx auth.Context, target map[string]string, depth int) bool {
+	if depth > maxRuleDepth {
+		return false
+	}
+	if target == nil {
+		target = map[string]string{}
+	}
+	for _, part := range strings.Split(rule, " and ") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		if !p.evalAtom(part, ctx, target, depth) {
+			return false
+		}
+	}
+	return true
+}
+
+func (p *Policy) evalAtom(part string, ctx auth.Context, target map[string]string, depth int) bool {
+	if depth > maxRuleDepth {
+		return false
+	}
+	if target == nil {
+		target = map[string]string{}
+	}
+	// oslo.policy-style unary not (single operand; no parentheses).
+	if strings.HasPrefix(part, "not ") {
+		inner := strings.TrimSpace(strings.TrimPrefix(part, "not "))
+		if inner == "" {
+			return false
+		}
+		return !p.evalAtom(inner, ctx, target, depth+1)
+	}
+	if strings.HasPrefix(part, "rule:") {
+		name := strings.TrimSpace(strings.TrimPrefix(part, "rule:"))
+		sub, ok := p.Rules[name]
+		if !ok {
+			return false
+		}
+		return p.evalOr(sub, ctx, target, depth+1)
+	}
 	switch part {
 	case "authenticated":
 		return ctx.UserID != ""
+	case "true":
+		return true
+	case "false":
+		return false
 	case "role:admin":
 		return ctx.HasRole("admin")
 	case "user_match":

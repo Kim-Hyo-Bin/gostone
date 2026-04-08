@@ -6,17 +6,17 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// Middleware validates X-Auth-Token for protected Identity routes (Keystone-style).
+// Middleware validates Authorization: Bearer or X-Auth-Token for protected Identity routes (Keystone-style).
 func Middleware(mgr *token.Manager) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		c.Header("Vary", "X-Auth-Token")
+		c.Header("Vary", "X-Auth-Token, Authorization")
 
 		if SkipAuth(c.Request.Method, c.Request.URL.Path) {
 			c.Next()
 			return
 		}
 
-		raw := c.GetHeader("X-Auth-Token")
+		raw := BearerOrXAuthToken(c)
 		if raw == "" {
 			httperr.Unauthorized(c, "The request you have made requires authentication.")
 			c.Abort()
@@ -31,10 +31,11 @@ func Middleware(mgr *token.Manager) gin.HandlerFunc {
 		}
 
 		c.Set(GinKey, Context{
-			UserID:    claims.UserID,
-			DomainID:  claims.DomainID,
-			ProjectID: claims.ProjectID,
-			Roles:     claims.Roles,
+			UserID:        claims.UserID,
+			DomainID:      claims.DomainID,
+			ProjectID:     claims.ProjectID,
+			ScopeDomainID: claims.ScopeDomainID,
+			Roles:         claims.Roles,
 		})
 		c.Next()
 	}

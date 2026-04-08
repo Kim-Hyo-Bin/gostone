@@ -46,6 +46,18 @@ func TestRegisterHealth(t *testing.T) {
 	}
 }
 
+func TestRegisterReadiness(t *testing.T) {
+	r := gin.New()
+	RegisterHealth(r, newTestHub(t))
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/ready", nil)
+	req.Host = "127.0.0.1:5000"
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("code %d %s", w.Code, w.Body.String())
+	}
+}
+
 func TestMount_passwordAuthAndListUsers(t *testing.T) {
 	r := gin.New()
 	h := newTestHub(t)

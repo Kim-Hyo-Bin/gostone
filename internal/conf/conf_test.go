@@ -109,18 +109,20 @@ func TestApplyEnvOverrides_viaLoad(t *testing.T) {
 	t.Setenv("GOSTONE_HTTP_ADDR", ":9010")
 	t.Setenv("GOSTONE_TOKEN_SECRET", "env-secret")
 	t.Setenv("GOSTONE_SQLITE_DSN", "file::memory:?cache=shared")
+	t.Setenv("GOSTONE_REGION_ID", "CustomRegion")
 	defer func() {
 		_ = os.Unsetenv("GOSTONE_HTTP_ADDR")
 		_ = os.Unsetenv("GOSTONE_TOKEN_SECRET")
 		_ = os.Unsetenv("GOSTONE_SQLITE_DSN")
+		_ = os.Unsetenv("GOSTONE_REGION_ID")
 	}()
 
 	cfg, err := Load(Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Service.Listen != ":9010" || cfg.Token.Secret != "env-secret" {
-		t.Fatalf("env: listen=%q secret=%q", cfg.Service.Listen, cfg.Token.Secret)
+	if cfg.Service.Listen != ":9010" || cfg.Token.Secret != "env-secret" || cfg.Service.RegionID != "CustomRegion" {
+		t.Fatalf("env: listen=%q secret=%q region_id=%q", cfg.Service.Listen, cfg.Token.Secret, cfg.Service.RegionID)
 	}
 }
 

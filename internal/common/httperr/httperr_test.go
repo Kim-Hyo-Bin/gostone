@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Kim-Hyo-Bin/gostone/internal/api/discovery"
 	"github.com/gin-gonic/gin"
 )
 
@@ -70,5 +71,21 @@ func TestUnauthorized_WWWAuthenticate(t *testing.T) {
 	Unauthorized(c, "nope")
 	if !strings.HasPrefix(w.Header().Get("WWW-Authenticate"), `Keystone uri="http://api.example/v3/"`) {
 		t.Fatalf("header: %q", w.Header().Get("WWW-Authenticate"))
+	}
+}
+
+func TestUnauthorized_WWWAuthenticate_forwarded(t *testing.T) {
+	t.Cleanup(discovery.ResetForwardedTrust)
+	discovery.SetTrustForwardedHeaders(true)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodGet, "/", nil)
+	c.Request.Host = "127.0.0.1:5000"
+	c.Request.Header.Set("X-Forwarded-Host", "keystone.public")
+	c.Request.Header.Set("X-Forwarded-Proto", "https")
+	Unauthorized(c, "nope")
+	h := w.Header().Get("WWW-Authenticate")
+	if !strings.Contains(h, `Keystone uri="https://keystone.public/v3/"`) {
+		t.Fatalf("header: %q", h)
 	}
 }

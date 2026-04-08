@@ -45,6 +45,7 @@ func TestRegister_healthAndDiscovery(t *testing.T) {
 		code int
 	}{
 		{"/health", http.StatusOK},
+		{"/ready", http.StatusOK},
 		{"/", http.StatusMultipleChoices},
 		{"/v3", http.StatusOK},
 	} {

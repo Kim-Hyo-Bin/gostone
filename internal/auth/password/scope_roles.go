@@ -8,28 +8,98 @@ import (
 	"gorm.io/gorm"
 )
 
-// pickProjectAndRoles selects project id and role names for a user in a domain.
-// With no project scope, aggregates all project roles in the domain (first project id wins for token scope).
-// With project scope, narrows to that project and verifies the user has an assignment.
-func pickProjectAndRoles(db *gorm.DB, userID, domainID string, scope *AuthScope) (projectID string, roleNames []string, err error) {
-	if scope != nil && scope.Project != nil {
-		return pickScopedProjectRoles(db, userID, domainID, scope)
+// ResolvedAuthScope is the effective Keystone scope after applying auth.scope JSON.
+type ResolvedAuthScope struct {
+	ProjectID     string
+	ScopeDomainID string
+	Roles         []string
+	// ScopedDomain is set when ScopeDomainID is non-empty (for token JSON "domain").
+	ScopedDomain models.Domain
+}
+
+// ResolveAuthScope maps auth.scope to project id, optional domain scope, and role names.
+func ResolveAuthScope(db *gorm.DB, userID, userHomeDomainID string, scope *AuthScope) (ResolvedAuthScope, error) {
+	if scope != nil && scope.Domain != nil && scope.Project != nil {
+		return ResolvedAuthScope{}, errors.New("ambiguous scope: specify either domain or project, not both")
 	}
+	if scope != nil && scope.Domain != nil {
+		return resolveDomainScope(db, userID, userHomeDomainID, scope)
+	}
+	if scope != nil && scope.Project != nil {
+		projectID, roles, err := pickScopedProjectRoles(db, userID, userHomeDomainID, scope)
+		if err != nil {
+			return ResolvedAuthScope{}, err
+		}
+		return ResolvedAuthScope{ProjectID: projectID, Roles: roles}, nil
+	}
+	return pickUnscopedOrAggregate(db, userID, userHomeDomainID)
+}
+
+func resolveDomainScope(db *gorm.DB, userID, userHomeDomainID string, scope *AuthScope) (ResolvedAuthScope, error) {
+	sd := scope.Domain
+	var dom models.Domain
+	switch {
+	case sd.ID != "":
+		if err := db.Where("id = ?", sd.ID).First(&dom).Error; err != nil {
+			return ResolvedAuthScope{}, fmt.Errorf("scope domain: %w", err)
+		}
+	case sd.Name != "":
+		if err := db.Where("name = ?", sd.Name).First(&dom).Error; err != nil {
+			return ResolvedAuthScope{}, fmt.Errorf("scope domain: %w", err)
+		}
+	default:
+		return ResolvedAuthScope{}, errors.New("domain id or name required in scope")
+	}
+	if dom.ID != userHomeDomainID {
+		return ResolvedAuthScope{}, errors.New("domain scope must match the user's domain")
+	}
+	roles, err := rolesForDomainAssignments(db, userID, dom.ID)
+	if err != nil {
+		return ResolvedAuthScope{}, err
+	}
+	return ResolvedAuthScope{
+		ScopeDomainID: dom.ID,
+		Roles:         roles,
+		ScopedDomain:  dom,
+	}, nil
+}
+
+func rolesForDomainAssignments(db *gorm.DB, userID, domainID string) ([]string, error) {
+	var rows []struct{ Name string }
+	if err := db.Model(&models.UserDomainRole{}).
+		Select("roles.name AS name").
+		Joins("JOIN roles ON roles.id = user_domain_roles.role_id").
+		Where("user_domain_roles.user_id = ? AND user_domain_roles.domain_id = ?", userID, domainID).
+		Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	out := make([]string, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, r.Name)
+	}
+	return out, nil
+}
+
+// pickUnscopedOrAggregate mirrors Keystone unscoped issuance: aggregate domain + project roles,
+// pick a default project id when the user has project assignments.
+func pickUnscopedOrAggregate(db *gorm.DB, userID, domainID string) (ResolvedAuthScope, error) {
 	type row struct {
 		RoleName  string
 		ProjectID string
 	}
 	var rows []row
-	err = db.Model(&models.UserProjectRole{}).
+	err := db.Model(&models.UserProjectRole{}).
 		Select("roles.name AS role_name", "user_project_roles.project_id AS project_id").
 		Joins("JOIN roles ON roles.id = user_project_roles.role_id").
 		Joins("JOIN projects ON projects.id = user_project_roles.project_id").
 		Where("user_project_roles.user_id = ? AND projects.domain_id = ?", userID, domainID).
 		Scan(&rows).Error
 	if err != nil {
-		return "", nil, err
+		return ResolvedAuthScope{}, err
 	}
 	seen := map[string]struct{}{}
+	var roleNames []string
+	var projectID string
 	for _, r := range rows {
 		if _, ok := seen[r.RoleName]; !ok {
 			seen[r.RoleName] = struct{}{}
@@ -39,21 +109,17 @@ func pickProjectAndRoles(db *gorm.DB, userID, domainID string, scope *AuthScope)
 			projectID = r.ProjectID
 		}
 	}
-	var domRoleRows []struct{ Name string }
-	if err := db.Model(&models.UserDomainRole{}).
-		Select("roles.name AS name").
-		Joins("JOIN roles ON roles.id = user_domain_roles.role_id").
-		Where("user_domain_roles.user_id = ? AND user_domain_roles.domain_id = ?", userID, domainID).
-		Scan(&domRoleRows).Error; err != nil {
-		return "", nil, err
+	domRoles, err := rolesForDomainAssignments(db, userID, domainID)
+	if err != nil {
+		return ResolvedAuthScope{}, err
 	}
-	for _, dr := range domRoleRows {
-		if _, ok := seen[dr.Name]; !ok {
-			seen[dr.Name] = struct{}{}
-			roleNames = append(roleNames, dr.Name)
+	for _, name := range domRoles {
+		if _, ok := seen[name]; !ok {
+			seen[name] = struct{}{}
+			roleNames = append(roleNames, name)
 		}
 	}
-	return projectID, roleNames, nil
+	return ResolvedAuthScope{ProjectID: projectID, Roles: roleNames}, nil
 }
 
 func pickScopedProjectRoles(db *gorm.DB, userID, userDomainID string, scope *AuthScope) (projectID string, roleNames []string, err error) {

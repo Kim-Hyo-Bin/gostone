@@ -9,6 +9,7 @@ import (
 )
 
 func TestPreferredV3URL(t *testing.T) {
+	t.Cleanup(ResetForwardedTrust)
 	r := httptest.NewRequest(http.MethodGet, "/", nil)
 	r.Host = "keystone:5000"
 	r.TLS = nil
@@ -21,7 +22,31 @@ func TestPreferredV3URL(t *testing.T) {
 	}
 }
 
+func TestConfigureDiscovery(t *testing.T) {
+	t.Cleanup(ResetDiscoveryDoc)
+	t.Cleanup(ResetForwardedTrust)
+	ConfigureDiscovery(DocConfig{VersionID: "v3.99", Updated: "2021-01-01T00:00:00Z", Status: "testing"})
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/v3", nil)
+	r.Host = "127.0.0.1:5000"
+	ServeV3Summary(w, r)
+	var body struct {
+		Version struct {
+			ID     string `json:"id"`
+			Status string `json:"status"`
+		} `json:"version"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body.Version.ID != "v3.99" || body.Version.Status != "testing" {
+		t.Fatalf("%+v", body)
+	}
+}
+
 func TestServeV3Summary(t *testing.T) {
+	t.Cleanup(ResetDiscoveryDoc)
+	t.Cleanup(ResetForwardedTrust)
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/v3", nil)
 	r.Host = "127.0.0.1:5000"
@@ -44,6 +69,8 @@ func TestServeV3Summary(t *testing.T) {
 }
 
 func TestServeRoot(t *testing.T) {
+	t.Cleanup(ResetDiscoveryDoc)
+	t.Cleanup(ResetForwardedTrust)
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/", nil)
 	r.Host = "example.org"

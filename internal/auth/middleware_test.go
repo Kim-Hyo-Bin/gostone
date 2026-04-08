@@ -91,7 +91,38 @@ func TestMiddleware_validToken_setsContext(t *testing.T) {
 	if w.Code != http.StatusOK || got.UserID != "uid" {
 		t.Fatalf("code=%d ctx=%+v", w.Code, got)
 	}
-	if w.Header().Get("Vary") != "X-Auth-Token" {
-		t.Fatalf("Vary: %q", w.Header().Get("Vary"))
+	if got := w.Header().Get("Vary"); got != "X-Auth-Token, Authorization" {
+		t.Fatalf("Vary: %q", got)
+	}
+}
+
+func TestMiddleware_validToken_authorizationBearer(t *testing.T) {
+	mgr, err := token.NewManager(nil, token.ProviderJWT, "secret-key-middleware-bearer", time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tok, _, err := mgr.Issue("uid", "did", "pid", []string{"admin"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var got Context
+	r := gin.New()
+	r.Use(Middleware(mgr))
+	r.GET("/x", func(c *gin.Context) {
+		var ok bool
+		got, ok = FromGin(c)
+		if !ok {
+			t.Error("no context")
+		}
+		c.Status(http.StatusOK)
+	})
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/x", nil)
+	req.Header.Set("Authorization", "Bearer "+tok)
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK || got.UserID != "uid" {
+		t.Fatalf("code=%d ctx=%+v", w.Code, got)
 	}
 }

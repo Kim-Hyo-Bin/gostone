@@ -5,8 +5,10 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/Kim-Hyo-Bin/gostone/internal/auth"
 	"github.com/Kim-Hyo-Bin/gostone/internal/auth/password"
 	"github.com/Kim-Hyo-Bin/gostone/internal/common/httperr"
+	"github.com/Kim-Hyo-Bin/gostone/internal/token"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
@@ -22,15 +24,16 @@ func (h *Hub) postAuthTokens(c *gin.Context) {
 		mapAuthError(c, err)
 		return
 	}
+	c.Header("Vary", "X-Auth-Token, Authorization")
 	c.Header("X-Subject-Token", tok)
 	c.Header("X-Auth-Token", tok)
 	c.JSON(http.StatusCreated, body)
 }
 
 func (h *Hub) getAuthTokens(c *gin.Context) {
-	raw := c.GetHeader("X-Auth-Token")
+	raw := auth.BearerOrXAuthToken(c)
 	if raw == "" {
-		httperr.Unauthorized(c, "Missing X-Auth-Token")
+		httperr.Unauthorized(c, "Missing authentication token")
 		return
 	}
 	claims, err := h.Tokens.Parse(raw)
@@ -52,7 +55,7 @@ func (h *Hub) headAuthTokens(c *gin.Context) {
 }
 
 func (h *Hub) deleteAuthTokens(c *gin.Context) {
-	raw := c.GetHeader("X-Auth-Token")
+	raw := auth.BearerOrXAuthToken(c)
 	if raw != "" {
 		_ = h.Tokens.Revoke(raw)
 	}
@@ -61,6 +64,18 @@ func (h *Hub) deleteAuthTokens(c *gin.Context) {
 
 func mapAuthError(c *gin.Context, err error) {
 	msg := err.Error()
+	if strings.Contains(msg, "could not store fernet token metadata") {
+		httperr.InternalServerError(c, "Could not complete authentication.")
+		return
+	}
+	if errors.Is(err, token.ErrFernetShadowMissing) || strings.HasPrefix(msg, "invalid token:") {
+		httperr.Unauthorized(c, "Invalid token.")
+		return
+	}
+	if strings.Contains(msg, "token id required") {
+		httperr.BadRequest(c, msg)
+		return
+	}
 	if errors.Is(err, gorm.ErrRecordNotFound) || strings.Contains(msg, "invalid password") ||
 		strings.Contains(msg, "user:") || strings.Contains(msg, "domain:") {
 		httperr.Unauthorized(c, "Invalid username or password")
@@ -68,8 +83,10 @@ func mapAuthError(c *gin.Context, err error) {
 	}
 	switch {
 	case strings.Contains(msg, "unsupported"), strings.Contains(msg, "required"),
-		strings.Contains(msg, "expected exactly one method"):
+		strings.Contains(msg, "expected exactly one method"), strings.Contains(msg, "ambiguous scope"):
 		httperr.BadRequest(c, msg)
+	case strings.Contains(msg, "token expired"), strings.Contains(msg, "token revoked"):
+		httperr.Unauthorized(c, "Invalid token.")
 	default:
 		httperr.Unauthorized(c, "Authentication failed")
 	}
