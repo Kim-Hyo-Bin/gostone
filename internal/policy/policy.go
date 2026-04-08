@@ -17,7 +17,7 @@ type Policy struct {
 func Default() *Policy {
 	rules := map[string]string{
 		"identity:get_user":    "role:admin or user_match",
-		"identity:list_users":  "role:admin",
+		"identity:list_users":  "role:admin or role:reader",
 		"identity:create_user": "role:admin",
 		"identity:update_user": "role:admin or user_match",
 		"identity:delete_user": "role:admin",
@@ -130,6 +130,9 @@ func (p *Policy) evalAtom(part string, ctx auth.Context, target map[string]strin
 	case "project_match":
 		return target["project_id"] != "" && target["project_id"] == ctx.ProjectID
 	default:
+		if strings.HasPrefix(part, "role:") {
+			return ctx.HasRole(strings.TrimPrefix(part, "role:"))
+		}
 		return false
 	}
 }

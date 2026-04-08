@@ -43,9 +43,26 @@ func Run(cfg *conf.Config) error {
 		return fmt.Errorf("bootstrap: %w", err)
 	}
 
-	mgr, err := token.NewManager(gdb, cfg.Token.Provider, cfg.Token.Secret, ttl)
+	authMethods := conf.ParseCommaList(cfg.Auth.Methods)
+	mgr, err := token.NewManagerWithConfig(token.Config{
+		DB:            gdb,
+		Provider:      cfg.Token.Provider,
+		TTL:           ttl,
+		JWTSecret:     cfg.Token.Secret,
+		FernetKeyRepo: strings.TrimSpace(cfg.FernetTokens.KeyRepository),
+		AuthMethods:   authMethods,
+	})
 	if err != nil {
 		return err
+	}
+
+	pol := policy.Default()
+	if path := strings.TrimSpace(cfg.Policy.File); path != "" {
+		loaded, err := policy.LoadFile(path)
+		if err != nil {
+			return fmt.Errorf("policy file %s: %w", path, err)
+		}
+		pol = loaded
 	}
 
 	if os.Getenv("GIN_MODE") == "" {
@@ -59,7 +76,7 @@ func Run(cfg *conf.Config) error {
 	hub := &v3.Hub{
 		DB:        gdb,
 		Tokens:    mgr,
-		Policy:    policy.Default(),
+		Policy:    pol,
 		PublicURL: cfg.Service.PublicURL,
 	}
 

@@ -30,9 +30,22 @@ listen = :5000
 # public_url = http://controller:5000
 
 [token]
-# uuid = opaque DB-backed tokens (default; closest to Keystone UUID provider). jwt = signed JWT (dev/tests).
+# uuid = opaque DB-backed tokens (default; closest to Keystone UUID provider).
+# jwt = signed JWT (dev/tests). fernet = Keystone-style Fernet (requires [fernet_tokens]).
 provider = uuid
-# Required when provider = jwt. Ignored for uuid.
+# Required when provider = jwt. Ignored for uuid / fernet.
 secret = change-me-in-production
 # Token lifetime in hours.
 expiration_hours = 24
+
+[auth]
+# Comma-separated method order (Fernet payload bit order). Override: GOSTONE_AUTH_METHODS
+# methods = password, token
+
+[fernet_tokens]
+# Directory of numbered key files (0, 1, 2, …) like Keystone. Override: GOSTONE_FERNET_KEY_REPO
+# key_repository = /etc/gostone/fernet-keys
+
+[policy]
+# Optional JSON map of action → rule expression; merged over built-in defaults. Override: GOSTONE_POLICY_FILE
+# file = /etc/gostone/policy.json

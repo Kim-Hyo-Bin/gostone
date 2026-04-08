@@ -29,4 +29,20 @@ type Config struct {
 		// ExpirationHours is token lifetime in hours.
 		ExpirationHours int `ini:"expiration_hours"`
 	} `ini:"token"`
+
+	// Auth mirrors Keystone [auth] (method order for Fernet bitmasks and token semantics).
+	Auth struct {
+		// Methods is a comma-separated list, e.g. "password,token" (default applied when empty).
+		Methods string `ini:"methods"`
+	} `ini:"auth"`
+
+	// FernetTokens mirrors Keystone [fernet_tokens] when provider=fernet.
+	FernetTokens struct {
+		KeyRepository string `ini:"key_repository"`
+	} `ini:"fernet_tokens"`
+
+	// Policy holds optional JSON rule overrides (merged onto built-in defaults).
+	Policy struct {
+		File string `ini:"file"`
+	} `ini:"policy"`
 }

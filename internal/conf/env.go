@@ -22,4 +22,13 @@ func applyEnvOverrides(c *Config) {
 	if v := os.Getenv("GOSTONE_PUBLIC_URL"); v != "" {
 		c.Service.PublicURL = v
 	}
+	if v := os.Getenv("GOSTONE_AUTH_METHODS"); v != "" {
+		c.Auth.Methods = v
+	}
+	if v := os.Getenv("GOSTONE_FERNET_KEY_REPO"); v != "" {
+		c.FernetTokens.KeyRepository = v
+	}
+	if v := os.Getenv("GOSTONE_POLICY_FILE"); v != "" {
+		c.Policy.File = v
+	}
 }
