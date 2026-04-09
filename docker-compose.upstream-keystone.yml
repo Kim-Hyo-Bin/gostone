@@ -1,0 +1,68 @@
+# Upstream OpenStack Keystone (Ubuntu UCA packages) + MariaDB for A/B tests against gostone.
+# Does not replace gostone; uses separate ports: API 15000, MySQL 14306.
+#
+#   docker compose -f docker-compose.upstream-keystone.yml up -d --build
+#   ./scripts/test-upstream-keystone.sh
+#   # or: ./scripts/integration-upstream-keystone.sh [--fresh]
+#
+# Fresh DB + keys:
+#   docker compose -f docker-compose.upstream-keystone.yml down -v
+#   docker compose -f docker-compose.upstream-keystone.yml up -d --build
+#
+# `name` keeps this stack in its own Compose project (avoids "orphan" warnings vs the main gostone compose).
+
+name: gostone-upstream-keystone
+
+services:
+  mariadb_upstream:
+    image: mariadb:11.3
+    container_name: keystone-upstream-mariadb
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass_upstream
+      MYSQL_DATABASE: keystone
+      MYSQL_USER: keystone
+      MYSQL_PASSWORD: keystonepass
+      MARIADB_AUTO_UPGRADE: "1"
+    ports:
+      - "14306:3306"
+    volumes:
+      - keystone_upstream_mariadb_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+      start_period: 30s
+
+  keystone_upstream:
+    build:
+      context: ./deploy/upstream-keystone
+    container_name: keystone-upstream-api
+    restart: unless-stopped
+    depends_on:
+      mariadb_upstream:
+        condition: service_healthy
+    environment:
+      KEYSTONE_DB_HOST: mariadb_upstream
+      KEYSTONE_DB_USER: keystone
+      KEYSTONE_DB_PASS: keystonepass
+      KEYSTONE_DB_NAME: keystone
+      KEYSTONE_ADMIN_PASSWORD: admin
+      KEYSTONE_PUBLIC_URL: http://127.0.0.1:15000/v3/
+    ports:
+      - "15000:5000"
+    volumes:
+      - keystone_upstream_fernet:/etc/keystone/fernet-keys
+      - keystone_upstream_credential:/etc/keystone/credential-keys
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://127.0.0.1:5000/v3"]
+      interval: 5s
+      timeout: 5s
+      retries: 18
+      start_period: 90s
+
+volumes:
+  keystone_upstream_mariadb_data:
+  keystone_upstream_fernet:
+  keystone_upstream_credential:

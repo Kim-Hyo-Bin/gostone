@@ -1,0 +1,93 @@
+# Basic Go pipeline: formatting, golangci-lint, unit tests, MariaDB integration tests.
+name: Go CI
+
+on:
+  push:
+    branches: [main, master, dev]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  fmt:
+    name: fmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Verify gofmt
+        run: |
+          out="$(gofmt -s -l .)"
+          if [ -n "$out" ]; then
+            echo "The following files need gofmt -s:" >&2
+            echo "$out" >&2
+            exit 1
+          fi
+
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v8
+        with:
+          version: v2.6.1
+          args: --timeout=8m
+
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Unit tests + coverage
+        run: go test ./... -covermode=atomic -coverprofile=coverage.out
+      - name: Coverage summary
+        run: go tool cover -func=coverage.out | tail -1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coverage-out
+          path: coverage.out
+          if-no-files-found: error
+
+  integration-mariadb:
+    name: integration (MariaDB)
+    runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:11.3
+        env:
+          MYSQL_ROOT_PASSWORD: rootpass
+          MYSQL_DATABASE: gostone_integration
+          MYSQL_USER: keystone
+          MYSQL_PASSWORD: keystonepass
+          MARIADB_AUTO_UPGRADE: "1"
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+          --health-start-period=30s
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: go test -tags=integration
+        env:
+          GOSTONE_DATABASE_CONNECTION: mysql+pymysql://keystone:keystonepass@127.0.0.1:3306/gostone_integration
+          GOSTONE_BOOTSTRAP_ADMIN_PASSWORD: admin
+          GOSTONE_TOKEN_PROVIDER: jwt
+          GOSTONE_TOKEN_SECRET: ci-integration-jwt-secret-key-min-length
+        run: go test -tags=integration -count=1 -v ./internal/integration/...

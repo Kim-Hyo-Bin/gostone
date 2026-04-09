@@ -1,0 +1,162 @@
+# OpenStack Tempest against gostone.
+# - Push to dev: SQLite + JWT, Identity token smoke (scripts/tempest-smoke.sh).
+# - Pull request targeting main: MariaDB + JWT, full Tempest Identity API v3 plugin scope.
+# - workflow_dispatch: run smoke or full manually.
+name: Tempest
+
+on:
+  push:
+    branches: [dev]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+    inputs:
+      suite:
+        description: smoke (SQLite, token smoke) or full (MariaDB, identity v3)
+        type: choice
+        options: [smoke, full]
+        default: smoke
+      tempest_regex:
+        description: 'Full suite only — optional --regex (empty = ^tempest\.api\.identity\.v3)'
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+env:
+  GOSTONE_BOOTSTRAP_ADMIN_PASSWORD: tempest-ci-admin-pass
+  GOSTONE_TOKEN_PROVIDER: jwt
+  GOSTONE_TOKEN_SECRET: tempest-ci-jwt-secret-key-at-least-32-chars
+  GOSTONE_HTTP_ADDR: 127.0.0.1:5000
+  GOSTONE_PUBLIC_URL: http://127.0.0.1:5000
+
+jobs:
+  tempest-smoke:
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.event.inputs.suite == 'smoke')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: ci/requirements-tempest.txt
+
+      - name: Install Tempest + Keystone plugin
+        run: pip install -r ci/requirements-tempest.txt
+
+      - name: Run Tempest smoke (SQLite)
+        run: bash scripts/tempest-smoke.sh
+
+  tempest-full:
+    if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && github.event.inputs.suite == 'full')
+    runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:11.3
+        env:
+          MYSQL_ROOT_PASSWORD: rootpass
+          MYSQL_DATABASE: gostone_tempest
+          MYSQL_USER: keystone
+          MYSQL_PASSWORD: keystonepass
+          MARIADB_AUTO_UPGRADE: "1"
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+          --health-start-period=30s
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build gostone
+        run: mkdir -p build && go build -o build/gostone ./cmd/gostone
+
+      - name: Start gostone
+        env:
+          GOSTONE_DATABASE_CONNECTION: mysql+pymysql://keystone:keystonepass@127.0.0.1:3306/gostone_tempest
+        run: |
+          set -euo pipefail
+          ./build/gostone > "${RUNNER_TEMP}/gostone.log" 2>&1 &
+          GOSTONE_PID_LOCAL=$!
+          echo "GOSTONE_PID=${GOSTONE_PID_LOCAL}" >> "$GITHUB_ENV"
+          ok=0
+          for _ in $(seq 1 90); do
+            if resp=$(curl -sfS "http://127.0.0.1:5000/health" 2>/dev/null) && printf '%s' "$resp" | grep -q gostone; then
+              ok=1
+              break
+            fi
+            if ! kill -0 "${GOSTONE_PID_LOCAL}" 2>/dev/null; then
+              echo "gostone exited before healthy; log:" >&2
+              tail -200 "${RUNNER_TEMP}/gostone.log" >&2 || true
+              exit 1
+            fi
+            sleep 1
+          done
+          if [[ "$ok" -ne 1 ]]; then
+            echo "gostone /health did not look like gostone; log:" >&2
+            tail -200 "${RUNNER_TEMP}/gostone.log" >&2 || true
+            exit 1
+          fi
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: ci/requirements-tempest.txt
+
+      - name: Install Tempest + Keystone plugin
+        run: pip install -r ci/requirements-tempest.txt
+
+      - name: Prepare Tempest config
+        env:
+          ADMIN_PW: ${{ env.GOSTONE_BOOTSTRAP_ADMIN_PASSWORD }}
+        run: |
+          set -euo pipefail
+          export ROOT="$GITHUB_WORKSPACE"
+          export PORT="5000"
+          export CONF_TMP="${RUNNER_TEMP}/tempest.conf"
+          export ADMIN_PW
+          python3 <<'PY'
+          import os
+          from pathlib import Path
+          root = Path(os.environ["ROOT"])
+          port = os.environ["PORT"]
+          pw = os.environ["ADMIN_PW"]
+          out = Path(os.environ["CONF_TMP"])
+          text = (root / "ci" / "tempest.conf").read_text(encoding="utf-8")
+          text = text.replace("__ADMIN_PASSWORD__", pw)
+          text = text.replace("http://127.0.0.1:5000", f"http://127.0.0.1:{port}")
+          out.write_text(text, encoding="utf-8")
+          PY
+
+      - name: Run Tempest (Identity API v3)
+        env:
+          TEMPEST_REGEX_INPUT: ${{ github.event.inputs.tempest_regex }}
+        run: |
+          set -euo pipefail
+          # Full Keystone plugin scope for API v3; narrow via workflow_dispatch if needed later.
+          DEFAULT_REGEX='^tempest\.api\.identity\.v3'
+          REGEX="${TEMPEST_REGEX_INPUT:-}"
+          if [ -z "$REGEX" ]; then REGEX="$DEFAULT_REGEX"; fi
+          tempest init "${RUNNER_TEMP}/tempest-ws"
+          install -m 644 "${RUNNER_TEMP}/tempest.conf" "${RUNNER_TEMP}/tempest-ws/etc/tempest.conf"
+          cd "${RUNNER_TEMP}/tempest-ws"
+          tempest run --config-file etc/tempest.conf --regex "$REGEX"
+
+      - name: Stop gostone
+        if: always()
+        run: |
+          if [[ -n "${GOSTONE_PID:-}" ]]; then kill "${GOSTONE_PID}" 2>/dev/null || true; fi

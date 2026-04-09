@@ -1,0 +1,33 @@
+# MariaDB for gostone / Keystone-style local dev (database + user match typical Keystone naming).
+# Usage:
+#   docker compose up -d
+#   export GOSTONE_DATABASE_CONNECTION='mysql+pymysql://keystone:keystonepass@127.0.0.1:13306/keystone'
+#   ./scripts/integration-mariadb.sh
+#
+# Extra DB `gostone_integration` is created for isolated integration tests (see deploy/mariadb-init).
+
+services:
+  mariadb:
+    image: mariadb:11.3
+    container_name: gostone-mariadb
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass
+      MYSQL_DATABASE: keystone
+      MYSQL_USER: keystone
+      MYSQL_PASSWORD: keystonepass
+      MARIADB_AUTO_UPGRADE: "1"
+    ports:
+      - "13306:3306"
+    volumes:
+      - gostone_mariadb_data:/var/lib/mysql
+      - ./deploy/mariadb-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+      start_period: 30s
+
+volumes:
+  gostone_mariadb_data:

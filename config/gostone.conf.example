@@ -1,0 +1,115 @@
+# Example gostone configuration (INI, Keystone/oslo.config style).
+# Copy to /etc/gostone/gostone.conf or pass: gostone --config-file /path/to/gostone.conf
+#
+# Drop-in fragments: place additional *.conf files in /etc/gostone/gostone.conf.d/
+# or set --config-dir /path/to/dir (or GOSTONE_CONFIG_DIR).
+#
+# --- Operator note: Keystone vs gostone (install / runtime) ---
+# Install:
+#   Keystone: packages or kolla-ansible; keystone-manage db_sync; keystone-manage bootstrap;
+#             fernet key repo under /etc/keystone/fernet-keys; often WSGI behind Apache/uwsgi.
+#   gostone:  single static binary; schema via AutoMigrate on startup OR `gostone db_sync`;
+#             first admin: `gostone bootstrap --bootstrap-password ...` OR GOSTONE_BOOTSTRAP_ADMIN_PASSWORD on server start.
+#             Empty-catalog seed uses [service] public_url (+ optional admin_url, internal_url) and region_id.
+# Config / env:
+#   Keystone: oslo.config, typically KEYSTONE_* in containers; SQLAlchemy URLs in [database].
+#   gostone:  GOSTONE_* env overrides; section names aligned where possible ([database],[token],...).
+# Process:
+#   Keystone: can split public/admin/internal APIs; eventlet/WSGI workers.
+#   gostone:  optional multi-bind ([service] listen_*); shared Gin stack; per-request listen label in context.
+#   Scale-out: run multiple gostone instances behind a load balancer (shared DB + Fernet keys); SIGINT/SIGTERM triggers graceful shutdown.
+#   Ops: GET /health (liveness JSON: status, service, version, commit); GET /ready adds checks.database; X-OpenStack-Request-Id on API. JSON access logs: request_id, host, user_agent, listen. CLI: `gostone version`.
+# Tokens / policy:
+#   Fernet unpack aims to match Keystone payload versions 0–10; issuance today is 0/1/2 + uuid/jwt.
+#   Policy: YAML/JSON merged over defaults; rule:/and/or/not supported; not full oslo.expression parser.
+# Discovery:
+#   GET / returns 300 + versions; Identity v3 media types — aligned in spirit; version id may differ from yours.
+
+[DEFAULT]
+# If true, Gin runs in debug mode when GIN_MODE is unset.
+debug = false
+
+[database]
+# Same role as Keystone [database] connection: SQLAlchemy URL or native driver DSN.
+#
+# SQLite (in-process, dev / tests; glebarez, no CGO):
+#   connection = file::memory:?cache=shared
+#   connection = file:/var/lib/gostone/gostone.db
+# SQLAlchemy-style (recommended when mirroring Keystone):
+#   connection = mysql+pymysql://keystone:PASSWORD@127.0.0.1:3306/keystone
+#   connection = postgresql+psycopg2://keystone:PASSWORD@127.0.0.1:5432/keystone
+# Native Go DSNs:
+#   connection = user:pass@tcp(127.0.0.1:3306)/keystone?parseTime=true&charset=utf8mb4
+#   connection = postgres://user:pass@127.0.0.1:5432/keystone?sslmode=disable
+#   connection = host=127.0.0.1 user=keystone password=SECRET dbname=keystone sslmode=disable
+connection = file::memory:?cache=shared
+# Optional sql.DB pool (0 = driver default). Env: GOSTONE_DATABASE_MAX_OPEN_CONNS, _MAX_IDLE_CONNS, _CONN_MAX_LIFETIME_SECONDS
+# max_open_conns = 25
+# max_idle_conns = 5
+# conn_max_lifetime_seconds = 300
+
+[log]
+# JSON access logs (one JSON object per line). Env: GOSTONE_LOG_JSON
+# json = false
+
+[service]
+# Single-interface mode: set listen only (default :5000). Override: GOSTONE_HTTP_ADDR
+listen = :5000
+# Multi-interface mode (Keystone-style): set any of the following; each non-empty value starts a listener
+# with the same Identity API. listen_public overrides listen for the public socket; if listen_public is
+# empty but listen is set, listen is used as the public address alongside admin/internal.
+# listen_public = 0.0.0.0:5000
+# listen_admin = 127.0.0.1:35357
+# listen_internal = 10.0.0.1:5000
+# Env: GOSTONE_LISTEN_PUBLIC, GOSTONE_LISTEN_ADMIN, GOSTONE_LISTEN_INTERNAL
+# Public URL for service catalog + bootstrap (scheme://host:port). Override: GOSTONE_PUBLIC_URL
+# public_url = http://controller:5000
+# Optional catalog URLs for admin / internal identity endpoints (seeded with the public endpoint).
+# admin_url = http://controller:35357
+# internal_url = http://10.0.0.1:5000
+# Env: GOSTONE_ADMIN_URL, GOSTONE_INTERNAL_URL
+# If enforce_admin_only_routes = true, comma-separated path prefixes are allowed only on the admin listener.
+# enforce_admin_only_routes = false
+# admin_only_path_prefixes = /v3/domains,/v3/regions
+# Env: GOSTONE_ENFORCE_ADMIN_ONLY_ROUTES, GOSTONE_ADMIN_ONLY_PATH_PREFIXES
+# Graceful shutdown timeout (seconds) on SIGINT/SIGTERM. Env: GOSTONE_SHUTDOWN_TIMEOUT_SECONDS
+# shutdown_timeout_seconds = 15
+# Behind a trusted reverse proxy: use X-Forwarded-Host / X-Forwarded-Proto for discovery Location + 401 URI.
+# trust_forwarded_headers = false
+# Env: GOSTONE_TRUST_FORWARDED_HEADERS (true/1/yes/on)
+# Region id for the seeded identity endpoint when the catalog is empty (default RegionOne). Override: GOSTONE_REGION_ID
+# region_id = RegionOne
+
+[token]
+# uuid = opaque DB-backed tokens (default; closest to Keystone UUID provider).
+# jwt = signed JWT (dev/tests). fernet = Keystone-style Fernet (requires [fernet_tokens]).
+provider = uuid
+# Required when provider = jwt. Ignored for uuid / fernet.
+secret = change-me-in-production
+# Token lifetime in hours.
+expiration_hours = 24
+
+[auth]
+# Comma-separated method order (Fernet payload bit order). Default includes application_credential.
+# Must match Keystone when verifying Fernet tokens. Override: GOSTONE_AUTH_METHODS
+# methods = password, token, application_credential
+
+[fernet_tokens]
+# Directory of numbered key files (0, 1, 2, …) like Keystone. Override: GOSTONE_FERNET_KEY_REPO
+# Highest number = primary (encrypt); others decrypt old tokens. Rotate like Keystone: add new highest id,
+# deploy, then retire old keys after max token TTL (see OpenStack Fernet token FAQ).
+# New key: `gostone fernet-keygen /path/to/repo` (writes next id atomically).
+# key_repository = /etc/gostone/fernet-keys
+
+[discovery]
+# Advertised Identity API version on GET / and GET /v3 (defaults match a common Keystone v3 doc).
+# api_version_id = v3.14
+# updated = 2020-04-07T00:00:00Z
+# status = stable
+# Env: GOSTONE_DISCOVERY_API_VERSION_ID, GOSTONE_DISCOVERY_UPDATED, GOSTONE_DISCOVERY_STATUS
+
+[policy]
+# Optional oslo.policy-style file (YAML or JSON): action/rule name → expression.
+# Supports "rule:other_name" indirection and "and" / "or". Merged over built-in defaults.
+# Override: GOSTONE_POLICY_FILE
+# file = /etc/gostone/policy.yaml
