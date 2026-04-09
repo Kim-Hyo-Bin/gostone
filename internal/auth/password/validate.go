@@ -2,6 +2,7 @@ package password
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/Kim-Hyo-Bin/gostone/internal/catalog"
@@ -21,11 +22,18 @@ func BuildTokenResponse(db *gorm.DB, claims *token.Claims) (map[string]any, erro
 	if err := db.Where("id = ?", user.DomainID).First(&dom).Error; err != nil {
 		return nil, fmt.Errorf("domain: %w", err)
 	}
-	exp := time.Now()
+	exp := time.Now().UTC()
 	if claims.ExpiresAt != nil {
 		exp = claims.ExpiresAt.Time
 	}
-	auditID := uuid.NewString()
+	issuedAt := time.Now().UTC()
+	if claims.IssuedAt != nil {
+		issuedAt = claims.IssuedAt.Time
+	}
+	auditID := strings.TrimSpace(claims.ID)
+	if auditID == "" {
+		auditID = uuid.NewString()
+	}
 	cat, err := catalog.Build(db)
 	if err != nil {
 		return nil, err
@@ -34,13 +42,17 @@ func BuildTokenResponse(db *gorm.DB, claims *token.Claims) (map[string]any, erro
 	if len(methods) == 0 {
 		methods = []string{"password"}
 	}
-	var scopedDom *models.Domain
+	rs := ResolvedAuthScope{
+		ProjectID:     claims.ProjectID,
+		ScopeDomainID: claims.ScopeDomainID,
+		Roles:         claims.Roles,
+	}
 	if claims.ScopeDomainID != "" {
 		var d models.Domain
 		if err := db.Where("id = ?", claims.ScopeDomainID).First(&d).Error; err != nil {
 			return nil, fmt.Errorf("scope domain: %w", err)
 		}
-		scopedDom = &d
+		rs.ScopedDomain = d
 	}
-	return buildTokenEnvelope(user, dom, claims.ProjectID, scopedDom, claims.Roles, exp, auditID, cat, methods), nil
+	return assembleTokenEnvelope(db, user, dom, rs, issuedAt, exp, auditID, cat, methods)
 }

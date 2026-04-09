@@ -30,7 +30,7 @@ func TestFernetIssueParseRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	tok, exp, err := mgr.IssueWithMethods("user-1", "dom-1", "proj-1", []string{"member"}, []string{"password"})
+	tok, _, exp, err := mgr.IssueWithMethods("user-1", "dom-1", "proj-1", []string{"member"}, []string{"password"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -51,7 +51,7 @@ func TestFernetIssueParseRoundTrip(t *testing.T) {
 	if len(claims.Methods) != 1 || claims.Methods[0] != "password" {
 		t.Fatalf("methods: %#v", claims.Methods)
 	}
-	if claims.ExpiresAt == nil || !claims.ExpiresAt.Time.Equal(exp.UTC().Truncate(time.Second)) {
+	if claims.ExpiresAt == nil || !claims.ExpiresAt.Equal(exp.UTC().Truncate(time.Second)) {
 		t.Fatalf("exp mismatch: claims=%v issue=%v", claims.ExpiresAt, exp)
 	}
 }
@@ -78,7 +78,7 @@ func TestFernetDomainScopeRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	tok, exp, err := mgr.IssueToken(TokenSubject{
+	tok, _, exp, err := mgr.IssueToken(TokenSubject{
 		UserID:        "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
 		DomainID:      "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
 		ScopeDomainID: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
@@ -99,7 +99,7 @@ func TestFernetDomainScopeRoundTrip(t *testing.T) {
 	if claims.ProjectID != "" {
 		t.Fatalf("expected no project: %+v", claims)
 	}
-	if claims.ExpiresAt == nil || !claims.ExpiresAt.Time.Equal(exp.UTC().Truncate(time.Second)) {
+	if claims.ExpiresAt == nil || !claims.ExpiresAt.Equal(exp.UTC().Truncate(time.Second)) {
 		t.Fatalf("exp mismatch")
 	}
 }

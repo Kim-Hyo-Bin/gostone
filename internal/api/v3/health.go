@@ -3,6 +3,7 @@ package v3
 import (
 	"net/http"
 
+	"github.com/Kim-Hyo-Bin/gostone/internal/buildinfo"
 	"github.com/gin-gonic/gin"
 )
 
@@ -13,18 +14,40 @@ func RegisterHealth(r *gin.Engine, h *Hub) {
 }
 
 func (h *Hub) getHealthLiveness(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"status": "ok"})
+	c.JSON(http.StatusOK, gin.H{
+		"status":  "ok",
+		"service": "gostone",
+		"version": buildinfo.Version,
+		"commit":  buildinfo.Commit,
+	})
 }
 
 func (h *Hub) getHealthReadiness(c *gin.Context) {
+	checks := gin.H{}
+	allOK := true
+
 	sqlDB, err := h.DB.DB()
 	if err != nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"status": "db_unavailable"})
-		return
+		checks["database"] = gin.H{"status": "error", "detail": err.Error()}
+		allOK = false
+	} else if err := sqlDB.Ping(); err != nil {
+		checks["database"] = gin.H{"status": "error", "detail": err.Error()}
+		allOK = false
+	} else {
+		checks["database"] = gin.H{"status": "ok"}
 	}
-	if err := sqlDB.Ping(); err != nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"status": "db_ping_failed"})
-		return
+
+	status := http.StatusOK
+	body := gin.H{
+		"status":  "ok",
+		"service": "gostone",
+		"version": buildinfo.Version,
+		"commit":  buildinfo.Commit,
+		"checks":  checks,
 	}
-	c.JSON(http.StatusOK, gin.H{"status": "ok"})
+	if !allOK {
+		status = http.StatusServiceUnavailable
+		body["status"] = "unavailable"
+	}
+	c.JSON(status, body)
 }

@@ -21,7 +21,7 @@ func TestBuildTokenResponse(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tokStr, _, err := mgr.Issue(fix.UserID, fix.DomainID, fix.ProjectID, []string{"admin"})
+	tokStr, _, _, err := mgr.Issue(fix.UserID, fix.DomainID, fix.ProjectID, []string{"admin"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -36,6 +36,14 @@ func TestBuildTokenResponse(t *testing.T) {
 	}
 	if body["token"] == nil {
 		t.Fatal(body)
+	}
+	tok, _ := body["token"].(map[string]any)
+	roles, _ := tok["roles"].([]map[string]any)
+	if len(roles) != 1 {
+		t.Fatalf("roles: %#v", tok["roles"])
+	}
+	if roles[0]["id"] != fix.RoleID || roles[0]["name"] != "admin" {
+		t.Fatalf("role object: %#v", roles[0])
 	}
 
 	_, err = BuildTokenResponse(gdb, &token.Claims{UserID: "missing-user-id"})

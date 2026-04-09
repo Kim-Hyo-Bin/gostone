@@ -67,7 +67,7 @@ func TestMiddleware_validToken_setsContext(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tok, _, err := mgr.Issue("uid", "did", "pid", []string{"admin"})
+	tok, _, _, err := mgr.Issue("uid", "did", "pid", []string{"admin"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -101,7 +101,7 @@ func TestMiddleware_validToken_authorizationBearer(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tok, _, err := mgr.Issue("uid", "did", "pid", []string{"admin"})
+	tok, _, _, err := mgr.Issue("uid", "did", "pid", []string{"admin"})
 	if err != nil {
 		t.Fatal(err)
 	}

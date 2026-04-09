@@ -25,6 +25,8 @@ type TokenSubject struct {
 	IdentityProviderID string
 	ProtocolID         string
 	FederatedGroupIDs  []string
+	// JTI, when non-empty, becomes JWT "jti" / UUID token id and the sole Keystone audit_ids entry.
+	JTI string
 }
 
 func (s TokenSubject) normalizedMethods() []string {

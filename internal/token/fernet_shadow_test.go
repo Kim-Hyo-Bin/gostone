@@ -34,7 +34,7 @@ func TestFernetParseRequiresShadowWhenDB(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tok, _, err := mgrNoDB.IssueWithMethods("u1", "d1", "p1", []string{"member"}, []string{"password"})
+	tok, _, _, err := mgrNoDB.IssueWithMethods("u1", "d1", "p1", []string{"member"}, []string{"password"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,7 +89,7 @@ func TestFernetIssueParseWithDBUsesShadow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tok, _, err := mgr.IssueWithMethods(userID, domainID, "proj-x", []string{"admin"}, []string{"password"})
+	tok, _, _, err := mgr.IssueWithMethods(userID, domainID, "proj-x", []string{"admin"}, []string{"password"})
 	if err != nil {
 		t.Fatal(err)
 	}

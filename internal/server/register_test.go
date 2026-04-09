@@ -256,7 +256,7 @@ func TestRegister_v3UsersForbiddenForMemberToken(t *testing.T) {
 	r := gin.New()
 	Register(r, h)
 	// Token without admin role on list_users
-	tok, _, err := h.Tokens.Issue("u1", "d1", "p1", []string{"member"})
+	tok, _, _, err := h.Tokens.Issue("u1", "d1", "p1", []string{"member"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -335,7 +335,7 @@ func TestRegister_headAuthTokens(t *testing.T) {
 	h := newTestHub(t)
 	r := gin.New()
 	Register(r, h)
-	tok, _, err := h.Tokens.Issue("u", "d", "p", []string{"admin"})
+	tok, _, _, err := h.Tokens.Issue("u", "d", "p", []string{"admin"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -353,7 +353,7 @@ func TestRegister_deleteAuthTokens(t *testing.T) {
 	h := newTestHub(t)
 	r := gin.New()
 	Register(r, h)
-	tok, _, err := h.Tokens.Issue("u", "d", "p", []string{"admin"})
+	tok, _, _, err := h.Tokens.Issue("u", "d", "p", []string{"admin"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -371,7 +371,7 @@ func TestRegister_getUser_notFound(t *testing.T) {
 	h := newTestHub(t)
 	r := gin.New()
 	Register(r, h)
-	tok, _, err := h.Tokens.Issue("u", "d", "p", []string{"admin"})
+	tok, _, _, err := h.Tokens.Issue("u", "d", "p", []string{"admin"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -389,7 +389,7 @@ func TestRegister_stubReturns501(t *testing.T) {
 	h := newTestHub(t)
 	r := gin.New()
 	Register(r, h)
-	tok, _, err := h.Tokens.Issue("u", "d", "p", []string{"admin"})
+	tok, _, _, err := h.Tokens.Issue("u", "d", "p", []string{"admin"})
 	if err != nil {
 		t.Fatal(err)
 	}

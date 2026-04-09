@@ -49,28 +49,39 @@ func issuePasswordFlow(db *gorm.DB, mgr *token.Manager, req *PasswordAuthRequest
 	}
 
 	var dom models.Domain
-	switch {
-	case u.Domain.ID != "":
-		if err := db.Where("id = ?", u.Domain.ID).First(&dom).Error; err != nil {
-			return "", time.Time{}, nil, fmt.Errorf("domain: %w", err)
-		}
-	case u.Domain.Name != "":
-		if err := db.Where("name = ?", u.Domain.Name).First(&dom).Error; err != nil {
-			return "", time.Time{}, nil, fmt.Errorf("domain: %w", err)
-		}
-	default:
-		return "", time.Time{}, nil, errors.New("user domain id or name required")
-	}
-
 	var user models.User
-	q := db.Where("domain_id = ?", dom.ID)
-	if u.ID != "" {
-		q = q.Where("id = ?", u.ID)
+
+	// Keystone / Tempest: password auth by user id + password without domain (id is unique).
+	if u.ID != "" && u.Domain.ID == "" && u.Domain.Name == "" {
+		if err := db.Where("id = ?", u.ID).First(&user).Error; err != nil {
+			return "", time.Time{}, nil, fmt.Errorf("user: %w", err)
+		}
+		if err := db.Where("id = ?", user.DomainID).First(&dom).Error; err != nil {
+			return "", time.Time{}, nil, fmt.Errorf("domain: %w", err)
+		}
 	} else {
-		q = q.Where("name = ?", u.Name)
-	}
-	if err := q.First(&user).Error; err != nil {
-		return "", time.Time{}, nil, fmt.Errorf("user: %w", err)
+		switch {
+		case u.Domain.ID != "":
+			if err := db.Where("id = ?", u.Domain.ID).First(&dom).Error; err != nil {
+				return "", time.Time{}, nil, fmt.Errorf("domain: %w", err)
+			}
+		case u.Domain.Name != "":
+			if err := db.Where("name = ?", u.Domain.Name).First(&dom).Error; err != nil {
+				return "", time.Time{}, nil, fmt.Errorf("domain: %w", err)
+			}
+		default:
+			return "", time.Time{}, nil, errors.New("user domain id or name required")
+		}
+
+		q := db.Where("domain_id = ?", dom.ID)
+		if u.ID != "" {
+			q = q.Where("id = ?", u.ID)
+		} else {
+			q = q.Where("name = ?", u.Name)
+		}
+		if err := q.First(&user).Error; err != nil {
+			return "", time.Time{}, nil, fmt.Errorf("user: %w", err)
+		}
 	}
 	if !user.Enabled {
 		return "", time.Time{}, nil, errors.New("user disabled")
@@ -86,13 +97,14 @@ func issuePasswordFlow(db *gorm.DB, mgr *token.Manager, req *PasswordAuthRequest
 	}
 
 	auditID := uuid.NewString()
-	tokenStr, exp, err = mgr.IssueToken(token.TokenSubject{
+	tokenStr, issued, exp, err := mgr.IssueToken(token.TokenSubject{
 		UserID:        user.ID,
 		DomainID:      dom.ID,
 		ProjectID:     rs.ProjectID,
 		ScopeDomainID: rs.ScopeDomainID,
 		Roles:         rs.Roles,
 		Methods:       []string{"password"},
+		JTI:           auditID,
 	})
 	if err != nil {
 		return "", time.Time{}, nil, err
@@ -102,12 +114,10 @@ func issuePasswordFlow(db *gorm.DB, mgr *token.Manager, req *PasswordAuthRequest
 	if err != nil {
 		return "", time.Time{}, nil, err
 	}
-	var scopedPtr *models.Domain
-	if rs.ScopeDomainID != "" {
-		d := rs.ScopedDomain
-		scopedPtr = &d
+	body, err = assembleTokenEnvelope(db, user, dom, rs, issued, exp, auditID, cat, []string{"password"})
+	if err != nil {
+		return "", time.Time{}, nil, err
 	}
-	body = buildTokenEnvelope(user, dom, rs.ProjectID, scopedPtr, rs.Roles, exp, auditID, cat, []string{"password"})
 	return tokenStr, exp, body, nil
 }
 
@@ -166,13 +176,14 @@ func issueTokenFlow(db *gorm.DB, mgr *token.Manager, req *PasswordAuthRequest) (
 	}
 
 	auditID := uuid.NewString()
-	tokenStr, exp, err = mgr.IssueToken(token.TokenSubject{
+	tokenStr, issued, exp, err := mgr.IssueToken(token.TokenSubject{
 		UserID:        user.ID,
 		DomainID:      dom.ID,
 		ProjectID:     rs.ProjectID,
 		ScopeDomainID: rs.ScopeDomainID,
 		Roles:         rs.Roles,
 		Methods:       []string{"token"},
+		JTI:           auditID,
 	})
 	if err != nil {
 		return "", time.Time{}, nil, err
@@ -181,11 +192,9 @@ func issueTokenFlow(db *gorm.DB, mgr *token.Manager, req *PasswordAuthRequest) (
 	if err != nil {
 		return "", time.Time{}, nil, err
 	}
-	var scopedPtr *models.Domain
-	if rs.ScopeDomainID != "" {
-		d := rs.ScopedDomain
-		scopedPtr = &d
+	body, err = assembleTokenEnvelope(db, user, dom, rs, issued, exp, auditID, cat, []string{"token"})
+	if err != nil {
+		return "", time.Time{}, nil, err
 	}
-	body = buildTokenEnvelope(user, dom, rs.ProjectID, scopedPtr, rs.Roles, exp, auditID, cat, []string{"token"})
 	return tokenStr, exp, body, nil
 }

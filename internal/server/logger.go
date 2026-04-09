@@ -66,14 +66,25 @@ func gostoneLogFormatter(param gin.LogFormatterParams) string {
 
 func jsonAccessLogFormatter(param gin.LogFormatterParams) string {
 	m := map[string]any{
-		"time":        param.TimeStamp.UTC().Format(time.RFC3339Nano),
-		"status":      param.StatusCode,
-		"latency_ms":  param.Latency.Milliseconds(),
-		"method":      param.Method,
-		"path":        param.Path,
-		"client_ip":   param.ClientIP,
-		"body_bytes":  param.BodySize,
-		"error":       param.ErrorMessage,
+		"time":       param.TimeStamp.UTC().Format(time.RFC3339Nano),
+		"status":     param.StatusCode,
+		"latency_ms": param.Latency.Milliseconds(),
+		"method":     param.Method,
+		"path":       param.Path,
+		"client_ip":  param.ClientIP,
+		"body_bytes": param.BodySize,
+		"error":      param.ErrorMessage,
+	}
+	if param.Request != nil {
+		if h := param.Request.Host; h != "" {
+			m["host"] = h
+		}
+		if ua := param.Request.UserAgent(); ua != "" {
+			m["user_agent"] = ua
+		}
+		if param.Request.TLS != nil {
+			m["tls"] = true
+		}
 	}
 	if param.Keys != nil {
 		if v, ok := param.Keys[requestIDGinKey].(string); ok && v != "" {

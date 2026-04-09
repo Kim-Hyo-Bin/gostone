@@ -83,11 +83,14 @@ func runBootstrapTx(db *gorm.DB, o Options) error {
 	}
 	domainID := uuid.NewString()
 	roleID := uuid.NewString()
+	memberRoleID := uuid.NewString()
 	projectID := uuid.NewString()
 	userID := uuid.NewString()
 
 	dom := models.Domain{ID: domainID, Name: o.DomainName, Enabled: true}
 	role := models.Role{ID: roleID, Name: o.AdminRoleName, DomainID: ""}
+	// Tempest dynamic creds expect a global "member" role (Keystone default).
+	memberRole := models.Role{ID: memberRoleID, Name: "member", DomainID: ""}
 	proj := models.Project{ID: projectID, DomainID: domainID, Name: o.ProjectName, Enabled: true}
 	user := models.User{
 		ID: userID, DomainID: domainID, Name: o.AdminUsername, Enabled: true,
@@ -100,6 +103,9 @@ func runBootstrapTx(db *gorm.DB, o Options) error {
 			return err
 		}
 		if err := tx.Create(&role).Error; err != nil {
+			return err
+		}
+		if err := tx.Create(&memberRole).Error; err != nil {
 			return err
 		}
 		if err := tx.Create(&proj).Error; err != nil {

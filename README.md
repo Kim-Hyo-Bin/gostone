@@ -143,6 +143,23 @@ Default unit tests stay in-memory SQLite and do **not** require Docker:
 go test ./...
 ```
 
+## Tempest (OpenStack API checks)
+
+Local **smoke** (SQLite + JWT, `TokensV3Test.test_create_token` and `test_validate_token`) passes against current gostone:
+
+```bash
+# If port 5000 is busy, set e.g. TEMPEST_SMOKE_PORT=15007
+./scripts/tempest-smoke.sh
+```
+
+**GitHub Actions** (`.github/workflows/tempest.yml`):
+
+| When | What runs |
+|------|-----------|
+| Push to **`dev`** | Same smoke as `scripts/tempest-smoke.sh` (fast, no MariaDB service). |
+| **Pull request** targeting **`main`** or **`master`** | Full Tempest scope for Identity API v3 (`^tempest\.api\.identity\.v3`) against gostone + MariaDB. |
+| **workflow_dispatch** | Choose **smoke** or **full**; optional `tempest_regex` for the full job. |
+
 ## Tests
 
 ```bash

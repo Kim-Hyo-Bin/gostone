@@ -2,6 +2,7 @@ package v3
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/Kim-Hyo-Bin/gostone/internal/common/httperr"
 	"github.com/Kim-Hyo-Bin/gostone/internal/models"
@@ -33,8 +34,12 @@ func (h *Hub) listDomains(c *gin.Context) {
 	if _, ok := h.requireAuthPolicy(c, "identity:list_domains", nil); !ok {
 		return
 	}
+	q := h.DB.Model(&models.Domain{}).Order("name")
+	if n := strings.TrimSpace(c.Query("name")); n != "" {
+		q = q.Where("name = ?", n)
+	}
 	var list []models.Domain
-	if err := h.DB.Order("name").Find(&list).Error; err != nil {
+	if err := q.Find(&list).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": gin.H{"message": err.Error()}})
 		return
 	}

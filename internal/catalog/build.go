@@ -34,7 +34,9 @@ func Build(db *gorm.DB) ([]any, error) {
 				"id":        e.ID,
 				"interface": e.Interface,
 				"region_id": e.RegionID,
-				"url":       e.URL,
+				// Keystone and Tempest expect "region" (same value as region_id) for catalog filtering.
+				"region": e.RegionID,
+				"url":    e.URL,
 			})
 		}
 		out = append(out, map[string]any{

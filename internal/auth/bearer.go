@@ -17,3 +17,12 @@ func BearerOrXAuthToken(c *gin.Context) string {
 	}
 	return strings.TrimSpace(c.GetHeader("X-Auth-Token"))
 }
+
+// SubjectOrBearerToken returns X-Subject-Token when set (Keystone token to validate or show),
+// otherwise the same token source as BearerOrXAuthToken (caller credential).
+func SubjectOrBearerToken(c *gin.Context) string {
+	if s := strings.TrimSpace(c.GetHeader("X-Subject-Token")); s != "" {
+		return s
+	}
+	return BearerOrXAuthToken(c)
+}

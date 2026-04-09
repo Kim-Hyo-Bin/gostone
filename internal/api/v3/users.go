@@ -27,8 +27,12 @@ func (h *Hub) listUsers(c *gin.Context) {
 	if _, ok := h.requireAuthPolicy(c, "identity:list_users", nil); !ok {
 		return
 	}
+	q := h.DB.Model(&models.User{})
+	if d := strings.TrimSpace(c.Query("domain_id")); d != "" {
+		q = q.Where("domain_id = ?", d)
+	}
 	var users []models.User
-	if err := h.DB.Find(&users).Error; err != nil {
+	if err := q.Find(&users).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": gin.H{"code": http.StatusInternalServerError, "message": err.Error()},
 		})

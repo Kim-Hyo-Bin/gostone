@@ -28,6 +28,11 @@ func Forbidden(c *gin.Context, message string) {
 	c.JSON(http.StatusForbidden, errorEnvelope(c, http.StatusForbidden, "Forbidden", message))
 }
 
+// NotFound is HTTP 404 with Keystone-style JSON (e.g. revoked or unknown token).
+func NotFound(c *gin.Context, message string) {
+	c.JSON(http.StatusNotFound, errorEnvelope(c, http.StatusNotFound, "Not Found", message))
+}
+
 // InternalServerError responds with HTTP 500 (unexpected server-side failures).
 func InternalServerError(c *gin.Context, message string) {
 	c.JSON(http.StatusInternalServerError, errorEnvelope(c, http.StatusInternalServerError, "Internal Server Error", message))

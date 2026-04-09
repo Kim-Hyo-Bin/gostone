@@ -18,7 +18,7 @@
 #   Keystone: can split public/admin/internal APIs; eventlet/WSGI workers.
 #   gostone:  optional multi-bind ([service] listen_*); shared Gin stack; per-request listen label in context.
 #   Scale-out: run multiple gostone instances behind a load balancer (shared DB + Fernet keys); SIGINT/SIGTERM triggers graceful shutdown.
-#   Ops: GET /health = liveness; GET /ready = readiness (DB ping); responses include X-OpenStack-Request-Id. CLI: `gostone version`.
+#   Ops: GET /health (liveness JSON: status, service, version, commit); GET /ready adds checks.database; X-OpenStack-Request-Id on API. JSON access logs: request_id, host, user_agent, listen. CLI: `gostone version`.
 # Tokens / policy:
 #   Fernet unpack aims to match Keystone payload versions 0–10; issuance today is 0/1/2 + uuid/jwt.
 #   Policy: YAML/JSON merged over defaults; rule:/and/or/not supported; not full oslo.expression parser.

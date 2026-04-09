@@ -75,13 +75,14 @@ func issueApplicationCredentialFlow(db *gorm.DB, mgr *token.Manager, req *Passwo
 
 	methods := []string{"application_credential"}
 	auditID := uuid.NewString()
-	tokenStr, exp, err = mgr.IssueToken(token.TokenSubject{
+	tokenStr, issued, exp, err := mgr.IssueToken(token.TokenSubject{
 		UserID:        user.ID,
 		DomainID:      dom.ID,
 		ProjectID:     rs.ProjectID,
 		ScopeDomainID: rs.ScopeDomainID,
 		Roles:         rs.Roles,
 		Methods:       methods,
+		JTI:           auditID,
 	})
 	if err != nil {
 		return "", time.Time{}, nil, err
@@ -90,11 +91,9 @@ func issueApplicationCredentialFlow(db *gorm.DB, mgr *token.Manager, req *Passwo
 	if err != nil {
 		return "", time.Time{}, nil, err
 	}
-	var scopedPtr *models.Domain
-	if rs.ScopeDomainID != "" {
-		d := rs.ScopedDomain
-		scopedPtr = &d
+	body, err = assembleTokenEnvelope(db, user, dom, rs, issued, exp, auditID, cat, methods)
+	if err != nil {
+		return "", time.Time{}, nil, err
 	}
-	body = buildTokenEnvelope(user, dom, rs.ProjectID, scopedPtr, rs.Roles, exp, auditID, cat, methods)
 	return tokenStr, exp, body, nil
 }

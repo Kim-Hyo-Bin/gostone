@@ -11,16 +11,11 @@ func registerV3Auth(v3 *gin.RouterGroup, h *Hub) {
 	v3.HEAD("/auth/tokens", h.headAuthTokens)
 	v3.DELETE("/auth/tokens", h.deleteAuthTokens)
 
-	registerAny(v3, "/auth/tokens/OS-PKI/revoked", "/v3/auth/tokens/OS-PKI/revoked", h)
+	v3.Any("/auth/tokens/OS-PKI/revoked", h.notImplementedOSPKIRevoked)
 
 	authFed := v3.Group("/auth/OS-FEDERATION")
-	registerAny(authFed, "/saml2", "/v3/auth/OS-FEDERATION/saml2", h)
-	registerAny(authFed, "/saml2/ecp", "/v3/auth/OS-FEDERATION/saml2/ecp", h)
-	registerAny(authFed, "/websso/:protocol_id", "/v3/auth/OS-FEDERATION/websso/:protocol_id", h)
-	registerAny(
-		authFed,
-		"/identity_providers/:idp_id/protocols/:protocol_id/websso",
-		"/v3/auth/OS-FEDERATION/identity_providers/:idp_id/protocols/:protocol_id/websso",
-		h,
-	)
+	authFed.Any("/saml2", h.notImplementedFederationAuth)
+	authFed.Any("/saml2/ecp", h.notImplementedFederationAuth)
+	authFed.Any("/websso/:protocol_id", h.notImplementedFederationAuth)
+	authFed.Any("/identity_providers/:idp_id/protocols/:protocol_id/websso", h.notImplementedFederationAuth)
 }

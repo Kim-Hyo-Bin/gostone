@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/Kim-Hyo-Bin/gostone/internal/common/httperr"
+	"github.com/Kim-Hyo-Bin/gostone/internal/common/timefmt"
 	"github.com/Kim-Hyo-Bin/gostone/internal/models"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -110,7 +111,7 @@ func trustRef(c *gin.Context, t models.Trust) map[string]any {
 		m["project_id"] = t.ProjectID
 	}
 	if t.ExpiresAt != nil {
-		m["expires_at"] = t.ExpiresAt.UTC().Format(time.RFC3339Nano)
+		m["expires_at"] = timefmt.KeystoneUTC(*t.ExpiresAt)
 	}
 	return m
 }

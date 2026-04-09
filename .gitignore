@@ -1,5 +1,7 @@
 # Build outputs
 /build/bin/
+# CI / local `go build -o build/gostone`
+/build/gostone
 
 # Compiled binaries (when built outside build/)
 *.exe
@@ -17,6 +19,30 @@ coverage.html
 *.prof
 cpu.prof
 mem.prof
+
+# golangci-lint (action / local)
+.cache/golangci-lint/
+
+# Python / Tempest (local or ad-hoc CI workspaces)
+.tempest-ws/
+.tempest-ci/
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+.venv/
+venv/
+.tox/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Tempest / stestr
+tempest.log
+.stestr/
+.testrepository/
+subunit.log
+*.subunit
 
 # Dependency directories
 vendor/

@@ -16,7 +16,7 @@ func (h *Hub) getSAML2Metadata(c *gin.Context) {
 }
 
 func (h *Hub) fedAuthPlaceholder(c *gin.Context) {
-	httperr.NotImplemented(c, "Federation protocol authentication (SAML2/OIDC mapped users) is not implemented; use password, token, or application_credential.")
+	httperr.NotImplemented(c, "Federation protocol authentication (SAML2/OIDC mapped users) is not implemented; use POST /v3/auth/tokens with password, token, or application_credential.")
 }
 
 // --- identity providers (override stub CRUD by registering real handlers on sub-router) ---

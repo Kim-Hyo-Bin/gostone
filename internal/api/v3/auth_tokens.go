@@ -31,13 +31,17 @@ func (h *Hub) postAuthTokens(c *gin.Context) {
 }
 
 func (h *Hub) getAuthTokens(c *gin.Context) {
-	raw := auth.BearerOrXAuthToken(c)
+	raw := auth.SubjectOrBearerToken(c)
 	if raw == "" {
 		httperr.Unauthorized(c, "Missing authentication token")
 		return
 	}
 	claims, err := h.Tokens.Parse(raw)
 	if err != nil {
+		if strings.Contains(err.Error(), "token revoked") {
+			httperr.NotFound(c, "Could not find token")
+			return
+		}
 		httperr.Unauthorized(c, "Invalid token.")
 		return
 	}
@@ -55,7 +59,7 @@ func (h *Hub) headAuthTokens(c *gin.Context) {
 }
 
 func (h *Hub) deleteAuthTokens(c *gin.Context) {
-	raw := auth.BearerOrXAuthToken(c)
+	raw := auth.SubjectOrBearerToken(c)
 	if raw != "" {
 		_ = h.Tokens.Revoke(raw)
 	}

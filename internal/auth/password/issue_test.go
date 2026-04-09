@@ -225,6 +225,32 @@ func TestIssueAuthToken_passwordTotpCompositeNotImplemented(t *testing.T) {
 	}
 }
 
+func TestIssueAuthToken_passwordByUserIDWithoutDomain(t *testing.T) {
+	gdb, err := testutil.OpenMemory()
+	if err != nil {
+		t.Fatal(err)
+	}
+	fix, err := testutil.SeedAdmin(gdb, "secret")
+	if err != nil {
+		t.Fatal(err)
+	}
+	mgr, err := token.NewManager(gdb, token.ProviderJWT, "k", time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var req PasswordAuthRequest
+	req.Auth.Identity.Methods = []string{"password"}
+	req.Auth.Identity.Password.User.ID = fix.UserID
+	req.Auth.Identity.Password.User.Password = "secret"
+	tok, _, body, err := IssueAuthToken(gdb, mgr, &req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tok == "" || body == nil || body["token"] == nil {
+		t.Fatalf("unexpected response: %#v", body)
+	}
+}
+
 func TestIssueAuthToken_singleTotpNotImplemented(t *testing.T) {
 	gdb, err := testutil.OpenMemory()
 	if err != nil {

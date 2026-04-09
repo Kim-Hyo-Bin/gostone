@@ -1,6 +1,7 @@
 package v3
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -44,6 +45,16 @@ func TestRegisterHealth(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("code %d %s", w.Code, w.Body.String())
 	}
+	var body map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if body["status"] != "ok" || body["service"] != "gostone" {
+		t.Fatalf("unexpected liveness JSON: %#v", body)
+	}
+	if _, ok := body["version"]; !ok {
+		t.Fatal("expected version in /health")
+	}
 }
 
 func TestRegisterReadiness(t *testing.T) {
@@ -55,6 +66,18 @@ func TestRegisterReadiness(t *testing.T) {
 	r.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("code %d %s", w.Code, w.Body.String())
+	}
+	var body map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	checks, _ := body["checks"].(map[string]any)
+	if checks == nil {
+		t.Fatalf("expected checks in /ready: %#v", body)
+	}
+	dbc, _ := checks["database"].(map[string]any)
+	if dbc == nil || dbc["status"] != "ok" {
+		t.Fatalf("database check: %#v", checks)
 	}
 }
 
@@ -104,7 +127,7 @@ func TestMount_getUser_selfWithoutAdminRole(t *testing.T) {
 	if err := h.DB.Where("name = ?", "admin").First(&u).Error; err != nil {
 		t.Fatal(err)
 	}
-	tok, _, err := h.Tokens.Issue(u.ID, u.DomainID, "", []string{})
+	tok, _, _, err := h.Tokens.Issue(u.ID, u.DomainID, "", []string{})
 	if err != nil {
 		t.Fatal(err)
 	}

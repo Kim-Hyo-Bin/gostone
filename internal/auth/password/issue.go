@@ -43,13 +43,14 @@ func IssueTokenForUser(db *gorm.DB, mgr *token.Manager, userID string, methods [
 		return "", time.Time{}, nil, err
 	}
 	auditID := uuid.NewString()
-	tokenStr, exp, err = mgr.IssueToken(token.TokenSubject{
+	tokenStr, issued, exp, err := mgr.IssueToken(token.TokenSubject{
 		UserID:        user.ID,
 		DomainID:      dom.ID,
 		ProjectID:     rs.ProjectID,
 		ScopeDomainID: rs.ScopeDomainID,
 		Roles:         rs.Roles,
 		Methods:       methods,
+		JTI:           auditID,
 	})
 	if err != nil {
 		return "", time.Time{}, nil, err
@@ -58,33 +59,9 @@ func IssueTokenForUser(db *gorm.DB, mgr *token.Manager, userID string, methods [
 	if err != nil {
 		return "", time.Time{}, nil, err
 	}
-	var scopedPtr *models.Domain
-	if rs.ScopeDomainID != "" {
-		d := rs.ScopedDomain
-		scopedPtr = &d
+	body, err = assembleTokenEnvelope(db, user, dom, rs, issued, exp, auditID, cat, methods)
+	if err != nil {
+		return "", time.Time{}, nil, err
 	}
-	body = buildTokenEnvelope(user, dom, rs.ProjectID, scopedPtr, rs.Roles, exp, auditID, cat, methods)
 	return tokenStr, exp, body, nil
-}
-
-func buildTokenEnvelope(user models.User, userDomain models.Domain, projectID string, scopedDomain *models.Domain, roles []string, exp time.Time, auditID string, catalogObjs []any, methods []string) map[string]any {
-	issued := time.Now().UTC().Format(time.RFC3339Nano)
-	expires := exp.UTC().Format(time.RFC3339Nano)
-	tok := map[string]any{
-		"methods":       methods,
-		"user":          map[string]any{"id": user.ID, "name": user.Name, "domain": map[string]any{"id": userDomain.ID, "name": userDomain.Name}},
-		"roles":         roles,
-		"expires_at":    expires,
-		"issued_at":     issued,
-		"audit_ids":     []string{auditID},
-		"catalog":       catalogObjs,
-		"project_scope": projectID != "",
-	}
-	if scopedDomain != nil {
-		tok["domain"] = map[string]any{"id": scopedDomain.ID, "name": scopedDomain.Name}
-	}
-	if projectID != "" {
-		tok["project"] = map[string]any{"id": projectID}
-	}
-	return map[string]any{"token": tok}
 }

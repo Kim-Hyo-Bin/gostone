@@ -3,6 +3,7 @@ package token
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -16,24 +17,30 @@ type JWT struct {
 	TTL    time.Duration
 }
 
-// Issue returns a signed token and its expiry instant.
-func (j *JWT) Issue(s TokenSubject) (string, time.Time, error) {
+// Issue returns a signed token, the issued-at instant (same as embedded "iat"), and expiry.
+func (j *JWT) Issue(s TokenSubject) (string, time.Time, time.Time, error) {
 	if err := s.validate(); err != nil {
-		return "", time.Time{}, err
+		return "", time.Time{}, time.Time{}, err
 	}
 	if len(j.Secret) == 0 {
-		return "", time.Time{}, errors.New("token secret is empty")
+		return "", time.Time{}, time.Time{}, errors.New("token secret is empty")
 	}
-	now := time.Now()
-	exp := now.Add(j.TTL)
+	// Match jwt.RegisteredClaims encoding (jwt.NewNumericDate truncates to jwt.TimePrecision, default 1s).
+	prec := jwt.TimePrecision
+	now := time.Now().UTC().Truncate(prec)
+	exp := now.Add(j.TTL).Truncate(prec)
 	methods := s.normalizedMethods()
+	jti := strings.TrimSpace(s.JTI)
+	if jti == "" {
+		jti = uuid.NewString()
+	}
 	claims := Claims{
-		UserID:        s.UserID,
-		DomainID:      s.DomainID,
-		ProjectID:     s.ProjectID,
-		ScopeDomainID: s.ScopeDomainID,
-		Roles:         s.Roles,
-		Methods:       methods,
+		UserID:             s.UserID,
+		DomainID:           s.DomainID,
+		ProjectID:          s.ProjectID,
+		ScopeDomainID:      s.ScopeDomainID,
+		Roles:              s.Roles,
+		Methods:            methods,
 		TrustID:            s.TrustID,
 		SystemScope:        s.SystemScope,
 		AppCredID:          s.AppCredID,
@@ -46,15 +53,15 @@ func (j *JWT) Issue(s TokenSubject) (string, time.Time, error) {
 			ExpiresAt: jwt.NewNumericDate(exp),
 			IssuedAt:  jwt.NewNumericDate(now),
 			Issuer:    j.Issuer,
-			ID:        uuid.NewString(),
+			ID:        jti,
 		},
 	}
 	jwtTok := jwt.NewWithClaims(jwt.SigningMethodHS256, &claims)
 	tokStr, err := jwtTok.SignedString(j.Secret)
 	if err != nil {
-		return "", time.Time{}, err
+		return "", time.Time{}, time.Time{}, err
 	}
-	return tokStr, exp, nil
+	return tokStr, now, exp, nil
 }
 
 // Parse validates a token string and returns claims.

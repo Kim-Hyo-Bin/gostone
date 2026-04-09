@@ -4,6 +4,9 @@ import "github.com/gin-gonic/gin"
 
 // registerV3 mounts Identity API v3 routes aligned with OpenStack Keystone stable/2024.2.
 // Registration order matters for Gin (wildcard name consistency and path specificity).
+//
+// Historical no-op registrars were removed; concrete routes live in registerV3DomainsAPI,
+// registerV3GroupsAPI, registerV3InheritAndSystem, registerV3PoliciesBundle, registerV3UserMisc, etc.
 func registerV3(v3 *gin.RouterGroup, h *Hub) {
 	registerV3DomainsAPI(v3, h)
 	registerV3ProjectsAPI(v3, h)
