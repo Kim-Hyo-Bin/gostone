@@ -190,3 +190,40 @@ func rolesForProject(db *gorm.DB, userID, projectID string) ([]string, error) {
 	}
 	return out, nil
 }
+
+// RolesForApplicationCredential returns role names bound to an application credential.
+func RolesForApplicationCredential(db *gorm.DB, appCredID string) ([]string, error) {
+	type rrow struct{ Name string }
+	var rrows []rrow
+	err := db.Model(&models.ApplicationCredentialRole{}).
+		Select("roles.name AS name").
+		Joins("JOIN roles ON roles.id = application_credential_roles.role_id").
+		Where("application_credential_roles.app_cred_id = ?", appCredID).
+		Scan(&rrows).Error
+	if err != nil {
+		return nil, err
+	}
+	out := make([]string, 0, len(rrows))
+	for _, r := range rrows {
+		out = append(out, r.Name)
+	}
+	return out, nil
+}
+
+func intersectScopeRoles(base ResolvedAuthScope, credRoles []string) (ResolvedAuthScope, error) {
+	set := make(map[string]struct{}, len(credRoles))
+	for _, r := range credRoles {
+		set[r] = struct{}{}
+	}
+	var out []string
+	for _, r := range base.Roles {
+		if _, ok := set[r]; ok {
+			out = append(out, r)
+		}
+	}
+	if len(out) == 0 {
+		return ResolvedAuthScope{}, errors.New("no roles from application credential match this scope")
+	}
+	base.Roles = out
+	return base, nil
+}

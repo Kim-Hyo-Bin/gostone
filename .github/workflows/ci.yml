@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master, dev]
+  pull_request:
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: go test ./...
+
+  integration-mariadb:
+    runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:11.3
+        env:
+          MYSQL_ROOT_PASSWORD: rootpass
+          MYSQL_DATABASE: gostone_integration
+          MYSQL_USER: keystone
+          MYSQL_PASSWORD: keystonepass
+          MARIADB_AUTO_UPGRADE: "1"
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+          --health-start-period=30s
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Integration tests (MariaDB)
+        env:
+          GOSTONE_DATABASE_CONNECTION: mysql+pymysql://keystone:keystonepass@127.0.0.1:3306/gostone_integration
+          GOSTONE_BOOTSTRAP_ADMIN_PASSWORD: admin
+          GOSTONE_TOKEN_PROVIDER: jwt
+          GOSTONE_TOKEN_SECRET: ci-integration-jwt-secret-key-min-length
+        run: go test -tags=integration -count=1 -v ./internal/integration/...

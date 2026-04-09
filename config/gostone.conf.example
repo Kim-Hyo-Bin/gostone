@@ -18,7 +18,7 @@
 #   Keystone: can split public/admin/internal APIs; eventlet/WSGI workers.
 #   gostone:  optional multi-bind ([service] listen_*); shared Gin stack; per-request listen label in context.
 #   Scale-out: run multiple gostone instances behind a load balancer (shared DB + Fernet keys); SIGINT/SIGTERM triggers graceful shutdown.
-#   Ops: GET /health = liveness (process up); GET /ready = readiness (DB ping). CLI: `gostone version`.
+#   Ops: GET /health = liveness; GET /ready = readiness (DB ping); responses include X-OpenStack-Request-Id. CLI: `gostone version`.
 # Tokens / policy:
 #   Fernet unpack aims to match Keystone payload versions 0–10; issuance today is 0/1/2 + uuid/jwt.
 #   Policy: YAML/JSON merged over defaults; rule:/and/or/not supported; not full oslo.expression parser.
@@ -43,6 +43,14 @@ debug = false
 #   connection = postgres://user:pass@127.0.0.1:5432/keystone?sslmode=disable
 #   connection = host=127.0.0.1 user=keystone password=SECRET dbname=keystone sslmode=disable
 connection = file::memory:?cache=shared
+# Optional sql.DB pool (0 = driver default). Env: GOSTONE_DATABASE_MAX_OPEN_CONNS, _MAX_IDLE_CONNS, _CONN_MAX_LIFETIME_SECONDS
+# max_open_conns = 25
+# max_idle_conns = 5
+# conn_max_lifetime_seconds = 300
+
+[log]
+# JSON access logs (one JSON object per line). Env: GOSTONE_LOG_JSON
+# json = false
 
 [service]
 # Single-interface mode: set listen only (default :5000). Override: GOSTONE_HTTP_ADDR
@@ -82,9 +90,9 @@ secret = change-me-in-production
 expiration_hours = 24
 
 [auth]
-# Comma-separated method order (Fernet payload bit order). Must match Keystone deployments
-# that verify or reissue tokens, or method bits will not line up. Override: GOSTONE_AUTH_METHODS
-# methods = password, token
+# Comma-separated method order (Fernet payload bit order). Default includes application_credential.
+# Must match Keystone when verifying Fernet tokens. Override: GOSTONE_AUTH_METHODS
+# methods = password, token, application_credential
 
 [fernet_tokens]
 # Directory of numbered key files (0, 1, 2, …) like Keystone. Override: GOSTONE_FERNET_KEY_REPO

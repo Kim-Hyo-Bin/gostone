@@ -9,6 +9,7 @@ import (
 type EngineOptions struct {
 	EnforceAdminOnly  bool
 	AdminOnlyPrefixes []string
+	JSONAccessLogs    bool
 }
 
 // NewEngine builds one Gin engine with shared middleware and Identity routes.
@@ -17,7 +18,12 @@ type EngineOptions struct {
 // Wrap the engine with listenctx.WrapHandler per listener so middleware can tell public from admin.
 func NewEngine(hub *v3.Hub, opts EngineOptions) *gin.Engine {
 	r := gin.New()
-	r.Use(gin.Recovery(), injectListenBindingMiddleware(), gin.LoggerWithFormatter(gostoneLogFormatter))
+	r.Use(gin.Recovery(), requestIDMiddleware(), injectListenBindingMiddleware())
+	if opts.JSONAccessLogs {
+		r.Use(gin.LoggerWithFormatter(jsonAccessLogFormatter))
+	} else {
+		r.Use(gin.LoggerWithFormatter(gostoneLogFormatter))
+	}
 	if opts.EnforceAdminOnly && len(opts.AdminOnlyPrefixes) > 0 {
 		r.Use(adminOnlyListenerMiddleware(opts.AdminOnlyPrefixes))
 	}

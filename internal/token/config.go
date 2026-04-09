@@ -25,9 +25,9 @@ type Config struct {
 	AuthMethods []string
 }
 
-// DefaultAuthMethods matches a minimal Keystone-style [auth] methods list (password, then token).
+// DefaultAuthMethods matches a Keystone-style [auth] methods list (order defines Fernet bitmask bits).
 func DefaultAuthMethods() []string {
-	return []string{"password", "token"}
+	return []string{"password", "token", "application_credential"}
 }
 
 // NewManager builds a Manager from DB + provider string + JWT secret (legacy signature).

@@ -14,6 +14,24 @@ func applyEnvOverrides(c *Config) {
 		// Deprecated: use GOSTONE_DATABASE_CONNECTION (same as Keystone [database] connection).
 		c.Database.Connection = v
 	}
+	if v := os.Getenv("GOSTONE_DATABASE_MAX_OPEN_CONNS"); v != "" {
+		if n, err := strconv.Atoi(strings.TrimSpace(v)); err == nil && n >= 0 {
+			c.Database.MaxOpenConns = n
+		}
+	}
+	if v := os.Getenv("GOSTONE_DATABASE_MAX_IDLE_CONNS"); v != "" {
+		if n, err := strconv.Atoi(strings.TrimSpace(v)); err == nil && n >= 0 {
+			c.Database.MaxIdleConns = n
+		}
+	}
+	if v := os.Getenv("GOSTONE_DATABASE_CONN_MAX_LIFETIME_SECONDS"); v != "" {
+		if n, err := strconv.Atoi(strings.TrimSpace(v)); err == nil && n >= 0 {
+			c.Database.ConnMaxLifetimeSeconds = n
+		}
+	}
+	if v := os.Getenv("GOSTONE_LOG_JSON"); v != "" {
+		c.Log.JSON = parseEnvBool(v)
+	}
 	if v := os.Getenv("GOSTONE_HTTP_ADDR"); v != "" {
 		c.Service.Listen = v
 	}

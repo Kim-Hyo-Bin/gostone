@@ -27,18 +27,21 @@ import (
 
 // Run starts the gostone HTTP server using the merged configuration (file + env overrides).
 func Run(cfg *conf.Config) error {
+	if err := conf.Validate(cfg); err != nil {
+		return err
+	}
 	ttl := time.Duration(cfg.Token.ExpirationHours) * time.Hour
 	if cfg.Token.ExpirationHours <= 0 {
 		ttl = 24 * time.Hour
-	}
-	prov := strings.ToLower(strings.TrimSpace(cfg.Token.Provider))
-	if prov == token.ProviderJWT && cfg.Token.Secret == "" {
-		return fmt.Errorf("token signing secret is empty for provider=jwt: set [token] secret or GOSTONE_TOKEN_SECRET")
 	}
 
 	gdb, err := db.Open(cfg.Database.Connection)
 	if err != nil {
 		return fmt.Errorf("database: %w", err)
+	}
+	lifetime := time.Duration(cfg.Database.ConnMaxLifetimeSeconds) * time.Second
+	if err := db.ConfigureConnPool(gdb, cfg.Database.MaxOpenConns, cfg.Database.MaxIdleConns, lifetime); err != nil {
+		return fmt.Errorf("database pool: %w", err)
 	}
 	if err := db.AutoMigrate(gdb); err != nil {
 		return fmt.Errorf("migrate: %w", err)
@@ -105,6 +108,7 @@ func Run(cfg *conf.Config) error {
 	engine := server.NewEngine(hub, server.EngineOptions{
 		EnforceAdminOnly:  cfg.Service.EnforceAdminOnlyRoutes,
 		AdminOnlyPrefixes: conf.ParseCommaList(cfg.Service.AdminOnlyPathPrefixes),
+		JSONAccessLogs:    cfg.Log.JSON,
 	})
 
 	shutdownSec := cfg.Service.ShutdownTimeoutSeconds

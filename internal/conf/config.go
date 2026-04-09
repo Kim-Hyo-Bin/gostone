@@ -9,13 +9,13 @@ type Config struct {
 		Debug bool `ini:"debug"`
 	} `ini:"DEFAULT"`
 
-	Database struct {
-		// Connection is the datastore URL/DSN (Keystone [database] connection: SQLAlchemy or native MySQL/Postgres/SQLite).
-		Connection string `ini:"connection"`
-	} `ini:"database"`
+	Database Database `ini:"database"`
 
 	// Service is [service] (HTTP listeners, catalog URL, region).
 	Service Service `ini:"service"`
+
+	// Log controls access log formatting.
+	Log Log `ini:"log"`
 
 	Token struct {
 		// Provider is uuid (Keystone-style opaque DB tokens, default) or jwt (signed JWT for dev/tests).

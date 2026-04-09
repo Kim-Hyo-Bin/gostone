@@ -77,13 +77,20 @@ func mapAuthError(c *gin.Context, err error) {
 		return
 	}
 	if errors.Is(err, gorm.ErrRecordNotFound) || strings.Contains(msg, "invalid password") ||
-		strings.Contains(msg, "user:") || strings.Contains(msg, "domain:") {
+		strings.Contains(msg, "user:") || strings.Contains(msg, "domain:") ||
+		strings.Contains(msg, "application credential:") || strings.Contains(msg, "application credential expired") {
 		httperr.Unauthorized(c, "Invalid username or password")
+		return
+	}
+	if strings.Contains(msg, "is not implemented") {
+		httperr.NotImplemented(c, msg)
 		return
 	}
 	switch {
 	case strings.Contains(msg, "unsupported"), strings.Contains(msg, "required"),
-		strings.Contains(msg, "expected exactly one method"), strings.Contains(msg, "ambiguous scope"):
+		strings.Contains(msg, "expected exactly one method"), strings.Contains(msg, "ambiguous scope"),
+		strings.Contains(msg, "application credential has no roles"),
+		strings.Contains(msg, "no roles from application credential match"):
 		httperr.BadRequest(c, msg)
 	case strings.Contains(msg, "token expired"), strings.Contains(msg, "token revoked"):
 		httperr.Unauthorized(c, "Invalid token.")

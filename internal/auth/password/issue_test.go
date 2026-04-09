@@ -201,3 +201,43 @@ func TestIssueAuthToken_ambiguousScope(t *testing.T) {
 		t.Fatalf("got %v", err)
 	}
 }
+
+func TestIssueAuthToken_passwordTotpCompositeNotImplemented(t *testing.T) {
+	gdb, err := testutil.OpenMemory()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := testutil.SeedAdmin(gdb, "secret"); err != nil {
+		t.Fatal(err)
+	}
+	mgr, err := token.NewManager(gdb, token.ProviderJWT, "k", time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var req PasswordAuthRequest
+	req.Auth.Identity.Methods = []string{"password", "totp"}
+	req.Auth.Identity.Password.User.Name = "admin"
+	req.Auth.Identity.Password.User.Password = "secret"
+	req.Auth.Identity.Password.User.Domain.Name = "Default"
+	_, _, _, err = IssueAuthToken(gdb, mgr, &req)
+	if err == nil || !strings.Contains(err.Error(), "not implemented") {
+		t.Fatalf("got %v", err)
+	}
+}
+
+func TestIssueAuthToken_singleTotpNotImplemented(t *testing.T) {
+	gdb, err := testutil.OpenMemory()
+	if err != nil {
+		t.Fatal(err)
+	}
+	mgr, err := token.NewManager(gdb, token.ProviderJWT, "k", time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var req PasswordAuthRequest
+	req.Auth.Identity.Methods = []string{"totp"}
+	_, _, _, err = IssueAuthToken(gdb, mgr, &req)
+	if err == nil || !strings.Contains(err.Error(), "not implemented") {
+		t.Fatalf("got %v", err)
+	}
+}

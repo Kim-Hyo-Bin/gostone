@@ -13,21 +13,27 @@ import (
 	"gorm.io/gorm"
 )
 
-// IssueAuthToken handles POST /v3/auth/tokens for supported method sets (password, token).
+// IssueAuthToken handles POST /v3/auth/tokens for supported method sets (password, token, application_credential).
+// Multiple methods (Keystone MFA) are rejected with a clear error unless every extra method is unimplemented (501 path).
 func IssueAuthToken(db *gorm.DB, mgr *token.Manager, req *PasswordAuthRequest) (tokenStr string, exp time.Time, body map[string]any, err error) {
-	if req == nil {
-		return "", time.Time{}, nil, errors.New("empty auth request")
+	methods, err := normalizedAuthMethods(req)
+	if err != nil {
+		return "", time.Time{}, nil, err
 	}
-	methods := req.Auth.Identity.Methods
-	if len(methods) != 1 {
-		return "", time.Time{}, nil, fmt.Errorf("unsupported auth methods: expected exactly one method, got %v", methods)
+	if len(methods) > 1 {
+		return issueMultiMethodAuth(db, mgr, req, methods)
 	}
 	switch methods[0] {
 	case "password":
 		return issuePasswordFlow(db, mgr, req)
 	case "token":
 		return issueTokenFlow(db, mgr, req)
+	case "application_credential":
+		return issueApplicationCredentialFlow(db, mgr, req)
 	default:
+		if isAuthMethodNotImplemented(methods[0]) {
+			return "", time.Time{}, nil, fmt.Errorf("authentication method %q is not implemented", methods[0])
+		}
 		return "", time.Time{}, nil, fmt.Errorf("unsupported auth method %q", methods[0])
 	}
 }

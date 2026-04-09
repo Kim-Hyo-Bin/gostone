@@ -1,6 +1,7 @@
 package server
 
 import (
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -61,4 +62,27 @@ func gostoneLogFormatter(param gin.LogFormatterParams) string {
 		param.Path,
 		param.ErrorMessage,
 	)
+}
+
+func jsonAccessLogFormatter(param gin.LogFormatterParams) string {
+	m := map[string]any{
+		"time":        param.TimeStamp.UTC().Format(time.RFC3339Nano),
+		"status":      param.StatusCode,
+		"latency_ms":  param.Latency.Milliseconds(),
+		"method":      param.Method,
+		"path":        param.Path,
+		"client_ip":   param.ClientIP,
+		"body_bytes":  param.BodySize,
+		"error":       param.ErrorMessage,
+	}
+	if param.Keys != nil {
+		if v, ok := param.Keys[requestIDGinKey].(string); ok && v != "" {
+			m["request_id"] = v
+		}
+		if v, ok := param.Keys[listenBindingGinKey].(string); ok && v != "" {
+			m["listen"] = v
+		}
+	}
+	b, _ := json.Marshal(m)
+	return string(b) + "\n"
 }

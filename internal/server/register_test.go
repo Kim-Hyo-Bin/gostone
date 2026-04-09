@@ -270,7 +270,7 @@ func TestRegister_v3UsersForbiddenForMemberToken(t *testing.T) {
 	}
 }
 
-func TestRegister_postAuthTokens_unsupportedMethod(t *testing.T) {
+func TestRegister_postAuthTokens_oauth1NotImplemented(t *testing.T) {
 	r := gin.New()
 	Register(r, newTestHub(t))
 	body := `{"auth":{"identity":{"methods":["oauth1"],"password":{"user":{"name":"admin","password":"x","domain":{"name":"Default"}}}}}}`
@@ -279,7 +279,7 @@ func TestRegister_postAuthTokens_unsupportedMethod(t *testing.T) {
 	req.Host = "127.0.0.1:5000"
 	req.Header.Set("Content-Type", "application/json")
 	r.ServeHTTP(w, req)
-	if w.Code != http.StatusBadRequest {
+	if w.Code != http.StatusNotImplemented {
 		t.Fatalf("code %d %s", w.Code, w.Body.String())
 	}
 }
